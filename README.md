@@ -9,15 +9,11 @@ This is repository with inference code for paper [**"HOOD: Hierarchical Graphs f
 
 
 ### Install conda enviroment
-We provide a conda environment file `hood.yml` to install all the dependencies. You can create a new environment with the following command:
+We provide a conda environment file `hood.yml` to install all the dependencies. 
+You can create and activate the environment with the following commands:
 
 ```bash
 conda env create -f hood.yml
-```
-
-Then, activate the environment with:
-
-```bash
 conda activate hood
 ```
 
