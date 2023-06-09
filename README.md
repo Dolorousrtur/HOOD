@@ -89,7 +89,7 @@ It aso has examples of such use-cases as adding a new garment from an .obj file 
 
 
 ## Training
-To thain a new HOOD model from scratch, you need to first download the [VTO](https://github.com/isantesteban/vto-dataset) dataset and convert it to our format.
+To train a new HOOD model from scratch, you need to first download the [VTO](https://github.com/isantesteban/vto-dataset) dataset and convert it to our format.
 
 You can find the instructions how to do that and the commands used to start the training the [Training.ipynb](Training.ipynb) notebook.
 
