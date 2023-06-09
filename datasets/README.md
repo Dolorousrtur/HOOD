@@ -16,6 +16,8 @@ The batch built in the dataset only has a set of *mesh edges* (extracted from th
 
 During the forward pass of the `Model` we also add proximity-based *world edges* (named *body edges* in the paper): both direct (`sample["cloth", "world_edge", "obstacle"]`) and inverse (`sample["obstacle", "world_edge", "cloth"]`).
 
+![Dataset](../static/datasets.png)
+
 ## Dataset's `wholeseq` parameter
 
 `wholeseq` parameter of the Dataset, controls whether the dataset returns (if `True`) a whole sequence of body poses or (if `False`) only a small window of the sequence.
@@ -26,6 +28,3 @@ During the forward pass of the `Model` we also add proximity-based *world edges*
 As the HOOD model is locally applied to each node of the input graph, it can be trained with `batch_size=1` (one pose sequence in a batch).
 
 Because of that, we only use `batch_size=1` in this repository. Larger batch sizes are not supported.
-
-
-![Dataset](../static/datasets.png)
