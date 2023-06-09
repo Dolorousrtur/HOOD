@@ -77,7 +77,7 @@ $HOOD_DATA
         |-- smpl_aux.pkl // dictionary with indices of SMPL vertices that correspond to hands, used to disable hands during inference to avoid body self-intersections
     |-- trained_models // directory with trained HOOD models
         |-- cvpr_submission.pth // model used in the CVPR paper
-        |-- postcvpr.pth // model trained with refactored code with several bug fixes after the CVPR paper
+        |-- postcvpr.pth // model trained with refactored code with several bug fixes after the CVPR submission
         |-- fine15.pth // baseline model without denoted as "Fine15" in the paper (15 message-passing steps, no long-range edges)
         |-- fine48.pth // baseline model without denoted as "Fine48" in the paper (48 message-passing steps, no long-range edges)
 ```
