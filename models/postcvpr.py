@@ -108,8 +108,8 @@ class Model(nn.Module):
             indices_from, indices_to = compute_connectivity_pt(vertices_cloth, vertices_obstacle,
                                                                self.collision_radius, k=self.k_world_edges)
 
-            # remove edges to obstacle nodes that are marked as obstacle
-            # omitted (we omit hand nodes to avoid body self-penetrations)
+            # remove edges to obstacle nodes that are marked as omitted
+            #  (we omit hand nodes to avoid body self-penetrations)
             indices_to_vertex_type = obstacle_vertex_type[indices_to][..., 0]
             vertex_type_mask = indices_to_vertex_type != NodeType.OBSTACLE_OMIT
 
