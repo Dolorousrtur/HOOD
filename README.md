@@ -1,7 +1,14 @@
-# Installation
+
+# HOOD
+
+### <img align=center src=./static/icons/project.png width='32'/> [Project](https://dolorousrtur.github.io/hood/) &ensp; <img align=center src=./static/icons/paper.png width='24'/> [Paper](https://arxiv.org/abs/2212.07242) &ensp;  
+
+This is repository with inference code for paper [**"HOOD: Hierarchical Graphs for Generalized Modelling of Clothing Dynamics"**](https://arxiv.org/abs/2212.07242) (CVPR2023).
+
+## Installation
 
 
-## Install conda enviroment
+### Install conda enviroment
 We provide a conda environment file `hood.yaml` to install all the dependencies. You can create a new environment with the following command:
 
 ```bash
@@ -46,8 +53,8 @@ conda install ipykernel -y; python -m ipykernel install --user --name hood --dis
 ```
 </details>
 
-## Download data
-### HOOD data
+### Download data
+#### HOOD data
 Download the auxiliary data for HOOD using this [link](https://drive.google.com/file/d/1RdA4L6Fy50VsKZ8k7ySp5ps5YtWoHSgs/view?usp=sharing).
 Unpack it anywhere you want and set the `HOOD_DATA` environment variable to the path of the unpacked folder.
 Also, set the `HOOD_PROJECT` environment variable to the path you cloned this repository to:
@@ -57,7 +64,7 @@ export HOOD_DATA=/path/to/hood_data
 export HOOD_PROJECT=/path/to/this/repository
 ```
 
-### SMPL models
+#### SMPL models
 Download the SMPL models using this [link](https://smpl-x.is.tue.mpg.de/). Unpack them into the `$HOOD_DATA/aux_data/smpl` folder.
 
 In the end your `$HOOD_DATA` folder should look like this:
@@ -79,17 +86,17 @@ $HOOD_DATA
         |-- fine48.pth // baseline model without denoted as "Fine48" in the paper (48 message-passing steps, no long-range edges)
 ```
 
-# Inference
+## Inference
 The jupyter notebook [Inference.ipynb](Inference.ipynb) contains an example of how to run inference of a trained HOOD model given a garment and a pose sequence.
 
 It aso has examples of such use-cases as adding a new garment from an .obj file and converting sequences from [AMASS](https://amass.is.tue.mpg.de/) and [VTO](https://github.com/isantesteban/vto-dataset) datasets to the format used in HOOD.
 
 
-# Training
+## Training
 To thain a new HOOD model from scratch, you need to first download the [VTO](https://github.com/isantesteban/vto-dataset) dataset and convert it to our format.
 
 You can find the instructions how to do that and the commands used to start the training the [Training.ipynb](Training.ipynb) notebook.
 
 
-# Repository structure
+## Repository structure
 See the [RepoIntro.md](RepoIntro.md) for more details in the repository structure.
