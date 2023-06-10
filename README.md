@@ -1,5 +1,5 @@
 
-# HOOD
+# HOOD: Hierarchical Graphs for Generalized Modelling of Clothing Dynamics
 
 ### <img align=center src=./static/icons/project.png width='32'/> [Project](https://dolorousrtur.github.io/hood/) &ensp; <img align=center src=./static/icons/paper.png width='24'/> [Paper](https://arxiv.org/abs/2212.07242) &ensp;  
 
