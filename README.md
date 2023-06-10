@@ -96,7 +96,7 @@ To train a new HOOD model from scratch, you need to first download the [VTO](htt
 You can find the instructions on how to do that and the commands used to start the training in the [Training.ipynb](Training.ipynb) notebook.
 
 ## Validation Sequences
-You can download the sequences used for validation (Table 1 in the main paper and Table s 1 and 2 in the Supplementary) 
+You can download the sequences used for validation (Table 1 in the main paper and Tables 1 and 2 in the Supplementary) 
 using [this link](https://drive.google.com/file/d/1qCZtERxahd50GNjkTx4rjDA2CsQ0M053)
 
 The code to generate these sequences and compute metrics over them will be added soon.
