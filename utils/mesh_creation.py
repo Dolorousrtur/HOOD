@@ -152,25 +152,34 @@ def add_coarse_edges(garment_dict, n_levels=4):
     return garment_dict
 
 
-def make_garment_dict(obj_file, smpl_file, coarse=True, n_coarse_levels=4, training=True, n_samples_lbs=0):
+def make_garment_dict(obj_file, smpl_file, coarse=True, n_coarse_levels=4, training=True, n_samples_lbs=0, verbose=False):
     """
     Create a dictionary for a garment from an obj file
     """
 
     garment_dict = make_restpos_dict(obj_file)
 
+
     if training:
+        if verbose:
+            print('Sampling LBS weights...')
         lbs = make_lbs_dict(obj_file, smpl_file, n_samples=n_samples_lbs)
         garment_dict['lbs'] = lbs
+        if verbose:
+            print('Done.')
 
     if coarse:
+        if verbose:
+            print('Adding coarse edges...')
         garment_dict = add_coarse_edges(garment_dict, n_levels=n_coarse_levels)
+        if verbose:
+            print('Done.')
 
     return garment_dict
 
 
 def add_garment_to_garments_dict(objfile, garments_dict_file, garment_name, smpl_file=None, coarse=True,
-                                 n_coarse_levels=4, training=True, n_samples_lbs=0):
+                                 n_coarse_levels=4, training=True, n_samples_lbs=0, verbose=False):
     """
     Add a new garment from a given obj file to the garments_dict_file
 
@@ -189,7 +198,7 @@ def add_garment_to_garments_dict(objfile, garments_dict_file, garment_name, smpl
         smpl_file = os.path.join(DEFAULTS.aux_data, 'smpl', 'SMPL_FEMALE.pkl')
 
     garment_dict = make_garment_dict(objfile, smpl_file, coarse=coarse, n_coarse_levels=n_coarse_levels,
-                                     training=training, n_samples_lbs=n_samples_lbs)
+                                     training=training, n_samples_lbs=n_samples_lbs, verbose=verbose)
 
     if os.path.exists(garments_dict_file):
         with open(garments_dict_file, 'rb') as f:
@@ -200,3 +209,5 @@ def add_garment_to_garments_dict(objfile, garments_dict_file, garment_name, smpl
     garments_dict[garment_name] = garment_dict
     with open(garments_dict_file, 'wb') as f:
         pickle.dump(garments_dict, f)
+
+    print(f"Garment '{garment_name}' added to {garments_dict_file}")

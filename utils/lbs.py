@@ -111,7 +111,4 @@ def pose_garment(
 
     verts = v_homo[:, :, :3, 0]
 
-    print('verts', verts.shape)
-    print('J_transformed', J_transformed.shape)
-
     return verts, J_transformed

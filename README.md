@@ -5,7 +5,7 @@
 
 This is a repository with training and inference code for the paper [**"HOOD: Hierarchical Graphs for Generalized Modelling of Clothing Dynamics"**](https://arxiv.org/abs/2212.07242) (CVPR2023).
 
-*Last update: 10.06.2023, link to the validation sequences added.*
+*Last update: 13.06.2023, link to the data archive updated, +minor clarifications.*
 
 ## Installation
 

@@ -1,3 +1,8 @@
+import os
+import sys
+
+sys.path.append(os.environ['HOOD_PROJECT'])
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -9,7 +14,7 @@ from aitviewer.viewer import Viewer
 from matplotlib import pyplot as plt
 from omegaconf import MISSING, OmegaConf
 
-from common import pickle_load
+from utils.common import pickle_load
 
 
 def place_meshes(cloth_pos: np.ndarray, obstacle_pos: np.ndarray, x_shift: float, y_shift: float):
