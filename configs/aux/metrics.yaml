@@ -5,12 +5,11 @@ experiment:
 
 runner:
   postcvpr:
-    warmup_steps: 100
-    optimizer:
-      lr: 5e-5
-      decay_steps: 50_000
-      decay_rate: 5e-1
     material:
+      density_override: 0.20022
+      lame_mu_override: 23600.0
+      lame_lambda_override: 44400
+      bending_coeff_override: 3.9625778333333325e-05
       lame_mu_min: 15909
       lame_mu_max: 63636
       lame_lambda_min: 3535.414406069427
@@ -21,43 +20,37 @@ runner:
       density_max: 7e-1
 
 dataloader:
-  num_workers: 8
+  num_workers: 0
   batch_size: 1
   pyg_data: True
   dataset:
     postcvpr:
-      data_root: 'vto_dataset/smpl_parameters'
+      data_root: 'aux_data/validation_sequences/pose_sequences'
       smpl_model: 'smpl/SMPL_FEMALE.pkl'
       garment_dict_file: 'garments_dict.pkl'
-      split_path: 'datasplits/train.csv'
-      lookup_steps: 5
+      split_path: 'validation_sequences/data_splits/comparison_seqs_to_snug.csv'
+      betas_file: 'validation_sequences/betas.pkl'
       pinned_verts: True
-      random_betas: True
-      betas_scale: 3.
       n_coarse_levels: 3
+      wholeseq: True
 
 criterions:
-  postcvpr.mataug.stretching_energy:
-  postcvpr.inertia:
-  postcvpr.gravitational_energy:
+  cvpr.mataug.stretching_energy:
+  cvpr.inertia:
+  cvpr.gravitational_energy:
     z_axis: 1
-  postcvpr.collision_penalty:
-    weight_start: 5e+3
-    weight_max: 5e+5
-    eps: 2e-3
-    start_rampup_iteration: 50000
-    n_rampup_iterations: 100000
-  postcvpr.mataug.bending_energy:
-  postcvpr.friction_energy:
+  aux.collision_metrics:
+    weight: 1.
+  cvpr.mataug.bending_energy:
+  cvpr.friction_energy:
     mu: 0.5
     friction_radius: 3e-3
 
 model:
-  postcvpr:
-    core_model: 'postcvpr'
-    architecture: "f,c0|f,c0|f,c0|d:c0,c1|c0,c1|c0,c1|d:c1|c1|c1|u:c0,c1|c0,c1|c0,c1|u:f,c0|f,c0|f,c0"
+  cvpr:
     collision_radius: 3e-2
     k_world_edges: 1
+    use_current_obstacle_pos: True
     n_coarse_levels: 3
 
 device: 'cuda:0'

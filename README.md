@@ -5,7 +5,7 @@
 
 This is a repository with training and inference code for the paper [**"HOOD: Hierarchical Graphs for Generalized Modelling of Clothing Dynamics"**](https://arxiv.org/abs/2212.07242) (CVPR2023).
 
-*Last update: 13.06.2023, link to the data archive updated, +minor clarifications.*
+*Latest update: 06.067.2023, code for computing metrics over the validation sequences added
 
 ## Installation
 
@@ -97,9 +97,11 @@ You can find the instructions on how to do that and the commands used to start t
 
 ## Validation Sequences
 You can download the sequences used for validation (Table 1 in the main paper and Tables 1 and 2 in the Supplementary) 
-using [this link](https://drive.google.com/file/d/1qCZtERxahd50GNjkTx4rjDA2CsQ0M053)
+using [this link](https://drive.google.com/file/d/1jFkDWPZW2HwYsYqcXAC3hX0NlumBnqT3/view?usp=sharing)
 
-The code to generate these sequences and compute metrics over them will be added soon.
+You can find instructions on how to compute metrics over these sequences in the [ComputeMetrics.ipynb](ComputeMetrics.ipynb) notebook.
+
+The code to generate these sequences yourself will be added soon.
 
 
 ## Repository structure

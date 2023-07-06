@@ -516,3 +516,27 @@ def load_obj(filename, tex_coords=False):
         return vertices, faces, uvs, faces_uv
 
     return vertices, faces
+
+
+class VertexNormals(nn.Module):
+    def __init__(self, normalize=True):
+        super().__init__()
+        self.normalize = normalize
+
+    def forward(self, vertices, faces):
+        v = vertices
+        f = faces
+
+        triangles = gather(v, f, 1, 2, 2)
+
+        # Compute face normals
+        v0, v1, v2 = torch.unbind(triangles, dim=-2)
+        e0 = v1 - v0
+        e1 = v2 - v1
+        e2 = v0 - v2
+        face_normals = torch.linalg.cross(e0, e1) + torch.linalg.cross(e1, e2) + torch.linalg.cross(e2, e0)  # F x 3
+
+        vn = unsorted_segment_sum(face_normals, f, 1, 2, 2)
+
+        vn = F.normalize(vn, dim=-1)
+        return vn

@@ -62,7 +62,7 @@ def create_loader(mcfg):
         obstacle_dict = {}
 
     if mcfg.single_sequence_file is None:
-        mcfg.data_root = os.path.join(DEFAULTS.vto_root, mcfg.data_root)
+        mcfg.data_root = os.path.join(DEFAULTS.data_root, mcfg.data_root)
 
     loader = Loader(mcfg, garments_dict,
                     smpl_model, garment_smpl_model_dict, obstacle_dict=obstacle_dict)

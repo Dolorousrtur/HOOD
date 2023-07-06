@@ -11,7 +11,7 @@ from smplx import SMPL
 from torch_geometric.data import HeteroData
 
 from utils.coarse import make_coarse_edges
-from utils.common import NodeType, triangles_to_edges, separate_arms
+from utils.common import NodeType, triangles_to_edges, separate_arms, pickle_load
 from utils.datasets import load_garments_dict, make_garment_smpl_dict
 from utils.defaults import DEFAULTS
 from utils.garment_smpl import GarmentSMPL
@@ -19,27 +19,31 @@ from utils.garment_smpl import GarmentSMPL
 
 @dataclass
 class Config:
-    data_root: str = MISSING                    # Path to the data root
-    smpl_model: str = MISSING                   # Path to the SMPL model relative to $HOOD_DATA/aux_data/
-    garment_dict_file: str = MISSING            # Path to the garment dict file with data for all garments relative to $HOOD_DATA/aux_data/
-    split_path: Optional[str] = None            # Path to the .csv split file relative to $HOOD_DATA/aux_data/
-    obstacle_dict_file: Optional[str] = None    # Path to the file with auxiliary data for obstacles relative to $HOOD_DATA/aux_data/
-    noise_scale: float = 3e-3                   # Noise scale for the garment vertices (not used in validation)
-    lookup_steps: int = 5                       # Number of steps to look up in the future (not used in validation)
-    pinned_verts: bool = False                  # Whether to use pinned vertices
-    wholeseq: bool = False                      # whether to load the whole sequence (always True in validation)
-    random_betas: bool = False                  # Whether to use random beta parameters for the SMPL model
-    use_betas_for_restpos: bool = False         # Whether to use beta parameters to get canonical garment geometry
-    betas_scale: float = 0.1                    # Scale for the beta parameters (not used if random_betas is False)
-    restpos_scale_min: float = 1.               # Minimum scale for randomly sampling the canonical garment geometry
-    restpos_scale_max: float = 1.               # Maximum scale for randomly sampling the canonical garment geometry
-    n_coarse_levels: int = 1                    # Number of coarse levels with long-range edges
-    separate_arms: bool = False                 # Whether to separate the arms from the rest of the body (to avoid body self-intersections)
-    zero_betas: bool = False                    # Whether to set the beta parameters to zero
-    button_edges: bool = False                  # Whether to load the button edges
+    data_root: str = MISSING  # Path to the data root relative to $HOOD_DATA/
+    smpl_model: str = MISSING  # Path to the SMPL model relative to $HOOD_DATA/aux_data/
+    garment_dict_file: str = MISSING  # Path to the garment dict file with data for all garments relative to $HOOD_DATA/aux_data/
+    split_path: Optional[str] = None  # Path to the .csv split file relative to $HOOD_DATA/aux_data/
+    obstacle_dict_file: Optional[
+        str] = None  # Path to the file with auxiliary data for obstacles relative to $HOOD_DATA/aux_data/
+    noise_scale: float = 3e-3  # Noise scale for the garment vertices (not used in validation)
+    lookup_steps: int = 5  # Number of steps to look up in the future (not used in validation)
+    pinned_verts: bool = False  # Whether to use pinned vertices
+    wholeseq: bool = False  # whether to load the whole sequence (always True in validation)
+    random_betas: bool = False  # Whether to use random beta parameters for the SMPL model
+    use_betas_for_restpos: bool = False  # Whether to use beta parameters to get canonical garment geometry
+    betas_scale: float = 0.1  # Scale for the beta parameters (not used if random_betas is False)
+    restpos_scale_min: float = 1.  # Minimum scale for randomly sampling the canonical garment geometry
+    restpos_scale_max: float = 1.  # Maximum scale for randomly sampling the canonical garment geometry
+    n_coarse_levels: int = 1  # Number of coarse levels with long-range edges
+    separate_arms: bool = False  # Whether to separate the arms from the rest of the body (to avoid body self-intersections)
+    zero_betas: bool = False  # Whether to set the beta parameters to zero
+    button_edges: bool = False  # Whether to load the button edges
     single_sequence_file: Optional[str] = None  # Path to the single sequence to load (used in Inference.ipynb)
     single_sequence_garment: Optional[
-        str] = None                             # Garment name for the single sequence to load (used in Inference.ipynb)
+        str] = None  # Garment name for the single sequence to load (used in Inference.ipynb)
+
+    betas_file: Optional[
+        str] = None  # Path to the file with the table of beta parameters (used in validation to generate sequences with specific body shapes)
 
 
 def make_obstacle_dict(mcfg: Config) -> dict:
@@ -63,10 +67,15 @@ def create_loader(mcfg: Config):
     obstacle_dict = make_obstacle_dict(mcfg)
 
     if mcfg.single_sequence_file is None:
-        mcfg.data_root = os.path.join(DEFAULTS.vto_root, mcfg.data_root)
+        mcfg.data_root = os.path.join(DEFAULTS.data_root, mcfg.data_root)
+
+    if mcfg.betas_file is not None:
+        betas_table = pickle_load(os.path.join(DEFAULTS.aux_data, mcfg.betas_file))['betas']
+    else:
+        betas_table = None
 
     loader = Loader(mcfg, garments_dict,
-                    smpl_model, garment_smpl_model_dict, obstacle_dict=obstacle_dict)
+                    smpl_model, garment_smpl_model_dict, obstacle_dict=obstacle_dict, betas_table=betas_table)
     return loader
 
 
@@ -643,9 +652,10 @@ class BodyBuilder:
 
 
 class SequenceLoader:
-    def __init__(self, mcfg, data_path):
+    def __init__(self, mcfg, data_path, betas_table=None):
         self.mcfg = mcfg
         self.data_path = data_path
+        self.betas_table = betas_table
 
     def process_sequence(self, sequence: dict) -> dict:
         """
@@ -680,12 +690,14 @@ class SequenceLoader:
 
         return sequence
 
-    def load_sequence(self, fname: str) -> dict:
+    def load_sequence(self, fname: str, betas_id: int=None) -> dict:
         """
         Load sequence of SMPL parameters from disc
         and process it
 
         :param fname: file name of the sequence
+        :param betas_id: index of the beta parameters in self.betas_table
+                        (used only in validation to generate sequences for metrics calculation
         :return: dict with SMPL parameters:
             sequence['body_pose'] np.array [Nx69]
             sequence['global_orient'] np.array [Nx3]
@@ -695,6 +707,11 @@ class SequenceLoader:
         filepath = os.path.join(self.data_path, fname + '.pkl')
         with open(filepath, 'rb') as f:
             sequence = pickle.load(f)
+
+        assert betas_id is None or self.betas_table is not None, "betas_id should be specified only in validation mode with valid betas_table"
+
+        if self.betas_table is not None:
+            sequence['betas'] = self.betas_table[betas_id]
 
         sequence = self.process_sequence(sequence)
 
@@ -707,21 +724,23 @@ class Loader:
     """
 
     def __init__(self, mcfg: Config, garments_dict: dict, smpl_model: SMPL,
-                 garment_smpl_model_dict: Dict[str, GarmentSMPL], obstacle_dict: dict):
-        self.sequence_loader = SequenceLoader(mcfg, mcfg.data_root)
+                 garment_smpl_model_dict: Dict[str, GarmentSMPL], obstacle_dict: dict, betas_table=None):
+        self.sequence_loader = SequenceLoader(mcfg, mcfg.data_root, betas_table=betas_table)
         self.garment_builder = GarmentBuilder(mcfg, garments_dict, garment_smpl_model_dict)
         self.body_builder = BodyBuilder(mcfg, smpl_model, obstacle_dict)
+
         self.data_path = mcfg.data_root
 
-    def load_sample(self, fname: str, idx: int, garment_name: str) -> HeteroData:
+    def load_sample(self, fname: str, idx: int, garment_name: str, betas_id: int) -> HeteroData:
         """
         Build HeteroData object for a single sample
         :param fname: name of the pose sequence relative to self.data_path
         :param idx: index of the frame to load (not used if self.mcfg.wholeseq == True)
         :param garment_name: name of the garment to load
+        :param betas_id: index of the beta parameters in self.betas_table (only used to generate validation sequences when comparing to snug/ssch)
         :return: HelteroData object (see BodyBuilder.build and GarmentBuilder.build for details)
         """
-        sequence = self.sequence_loader.load_sequence(fname)
+        sequence = self.sequence_loader.load_sequence(fname, betas_id=betas_id)
         sample = HeteroData()
         sample = self.garment_builder.build(sample, sequence, idx, garment_name)
         sample = self.body_builder.build(sample, sequence, idx)
@@ -765,14 +784,19 @@ class Dataset:
         """
         Load a sample given a global index
         """
+
+        betas_id = None
         if self.wholeseq:
             fname = self.datasplit.id[item]
             garment_name = self.datasplit.garment[item]
             idx = 0
+
+            if 'betas_id' in self.datasplit:
+                betas_id = int(self.datasplit.betas_id[item])
         else:
             fname, idx, garment_name = self._find_idx(item)
 
-        sample = self.loader.load_sample(fname, idx, garment_name)
+        sample = self.loader.load_sample(fname, idx, garment_name, betas_id=betas_id)
         sample['sequence_name'] = fname
         sample['garment_name'] = garment_name
 
