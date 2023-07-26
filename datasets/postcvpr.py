@@ -634,12 +634,10 @@ class BodyBuilder:
                 sample['obstacle'].target_pos torch.FloatTensor [Vx3]: vertex positions at the next frame
                 sample['obstacle'].lookup torch.FloatTensor [VxLx3] (L == self.mcfg.lookup_steps): vertex positions at several future frames
 
-            sample['obstacle'].rest_pos torch.FloatTensor [Vx3]: vertex positions in the canonical pose
             sample['obstacle'].faces_batch torch.LongTensor [3xF]: garment faces
             sample['obstacle'].vertex_type torch.LongTensor [Vx1]: vertex type (1 - regular obstacle, 2 - omitted)
             sample['obstacle'].vertex_level torch.LongTensor [Vx1]: level of the vertex in the hierarchy (always 0 for the body)
 
-            sample['cloth', 'mesh_edge', 'cloth'].edge_index: torch.LongTensor [2xE]: mesh edges
 
         
         """
