@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from omegaconf import MISSING, OmegaConf
+from omegaconf import MISSING, OmegaConf, DictConfig
 from tqdm import tqdm
 
 from utils.common import move2device, pickle_dump
@@ -58,6 +58,9 @@ def create_sequences(out_root, model_name, competitor, conf):
 
 @dataclass
 class Config:
+    model: str = MISSING  # 'cvpr' or 'postcvpr'
+    comparison: str = MISSING  # 'snug' | 'ssch'
+
     config_name: str = 'aux/comparisons'
     rollouts_dir: str = 'validation_sequences/my_hood_rollouts'
     obstacle_dict_file: str = 'smpl_aux.pkl'
@@ -74,45 +77,53 @@ class Config:
     restpos_file: Optional[str] = None
     zero_betas: bool = False
 
-    model: str = MISSING  # 'cvpr' or 'postcvpr'
-    comparison: str = MISSING  # 'snug' | 'ssch'
-
     render_videos: bool = False
     separate_arms: bool = True
 
+def create_sequences(model: str, comparison: str, rollouts_dir: str, verbose=True, **kwargs):
+    """
+    Creates and saves to disc HOOD rollouts used for comparison with SNUG and SSCH in the paper
 
-if __name__ == '__main__':
-    conf = OmegaConf.structured(Config)
-    conf_cli = OmegaConf.from_cli()
-    conf = OmegaConf.merge(conf, conf_cli)
+    :param model: pretrained model to use ('postcvpr'|'cvpr'|'fine15'|'fine48')
+    :param comparison: 'snug' or 'ssch'
+    :param rollouts_dir: directory to save rollouts to, relative to DEFAULTS.aux_data
+    :param kwargs: additional arguments, see Config
+    """
+    conf = Config(model=model, comparison=comparison, rollouts_dir=rollouts_dir, **kwargs)
+    _create_sequences_from_config(conf, verbose=verbose)
 
-    if conf.comparison == 'snug':
-        conf.split_path = 'validation_sequences/datasplits/comparison_seqs_to_snug.csv'
-        conf.restpos_file = 'validation_sequences/rest_geometries/snug.pkl'
-        rollouts_dir = Path(DEFAULTS.aux_data) / conf.rollouts_dir / 'vs_snug'
-    elif conf.comparison == 'ssch':
-        conf.split_path = 'validation_sequences/datasplits/comparison_seqs_to_ssch.csv'
-        conf.restpos_file = 'validation_sequences/rest_geometries/ssch.pkl'
-        rollouts_dir = Path(DEFAULTS.aux_data) / conf.rollouts_dir / 'vs_ssch'
+def _create_sequences_from_config(validation_conf: DictConfig, verbose=True):
 
-    if conf.model == 'postcvpr':
+    if validation_conf.comparison == 'snug':
+        validation_conf.split_path = 'validation_sequences/datasplits/comparison_seqs_to_snug.csv'
+        validation_conf.restpos_file = 'validation_sequences/rest_geometries/snug.pkl'
+        rollouts_dir = Path(DEFAULTS.aux_data) / validation_conf.rollouts_dir / 'vs_snug'
+    elif validation_conf.comparison == 'ssch':
+        validation_conf.split_path = 'validation_sequences/datasplits/comparison_seqs_to_ssch.csv'
+        validation_conf.restpos_file = 'validation_sequences/rest_geometries/ssch.pkl'
+        rollouts_dir = Path(DEFAULTS.aux_data) / validation_conf.rollouts_dir / 'vs_ssch'
+
+    if validation_conf.model == 'postcvpr':
         checkpoint_path = Path(DEFAULTS.data_root) / 'trained_models' / 'postcvpr.pth'
         model_config = 'postcvpr'
-    elif conf.model == 'cvpr':
+    elif validation_conf.model == 'cvpr':
         checkpoint_path = Path(DEFAULTS.data_root) / 'trained_models' / 'cvpr_submission.pth'
         model_config = 'cvpr'
-    elif conf.model == 'fine15':
+    elif validation_conf.model == 'fine15':
         checkpoint_path = Path(DEFAULTS.data_root) / 'trained_models' / 'fine15.pth'
         model_config = 'cvpr_baselines/fine15'
 
-    elif conf.model == 'fine48':
+    elif validation_conf.model == 'fine48':
         checkpoint_path = Path(DEFAULTS.data_root) / 'trained_models' / 'fine48.pth'
         model_config = 'cvpr_baselines/fine48'
 
+    if verbose:
+        print(f'Creating sequences for {validation_conf.comparison} using {validation_conf.model} model')
+        print(f'Rollouts will be saved to {rollouts_dir}')
 
 
-    modules, experiment_config = load_params(conf.config_name)
-    experiment_config = update_config_for_validation(experiment_config, conf)
+    modules, experiment_config = load_params(validation_conf.config_name)
+    experiment_config = update_config_for_validation(experiment_config, validation_conf)
     replace_model(modules, experiment_config, model_config)
     runner_module, runner = load_runner_from_checkpoint(checkpoint_path, modules, experiment_config)
     dataloader_m = create_dataloader_module(modules, experiment_config)
@@ -130,4 +141,9 @@ if __name__ == '__main__':
         trajectories_dict = runner.valid_rollout(sequence, bare=True, record_time=True)
         pickle_dump(dict(trajectories_dict), out_path)
 
+if __name__ == '__main__':
+    conf = OmegaConf.structured(Config)
+    conf_cli = OmegaConf.from_cli()
+    conf = OmegaConf.merge(conf, conf_cli)
 
+    _create_sequences_from_config(conf)
