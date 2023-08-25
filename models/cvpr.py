@@ -26,7 +26,6 @@ class Config:
     message_passing_steps: int = 15
     n_coarse_levels: int = 1
     collision_radius: float = 5e-2
-    use_current_obstacle_pos: bool = False
     k_world_edges: Optional[int] = None
 
     device: str = II('device')
@@ -38,7 +37,6 @@ def create(mcfg):
                   n_nodefeatures=mcfg.n_nodefeatures,
                   n_edgefeatures_mesh=mcfg.n_edgefeatures_mesh,
                   n_edgefeatures_world=mcfg.n_edgefeatures_world,
-                  use_current_obstacle_pos=mcfg.use_current_obstacle_pos,
                   k_world_edges=mcfg.k_world_edges,
                   n_coarse_levels=mcfg.n_coarse_levels).to(mcfg.device)
 
@@ -46,8 +44,7 @@ def create(mcfg):
 
 
 class Model(nn.Module):
-    def __init__(self, learned_model, collision_radius, n_nodefeatures, n_edgefeatures_mesh, n_edgefeatures_world,
-                 use_current_obstacle_pos, k_world_edges, n_coarse_levels):
+    def __init__(self, learned_model, collision_radius, n_nodefeatures, n_edgefeatures_mesh, n_edgefeatures_world, k_world_edges, n_coarse_levels):
         super().__init__()
 
         self._learned_model = learned_model
@@ -65,7 +62,6 @@ class Model(nn.Module):
 
         self.nodetype_embedding = nn.Embedding(common.NodeType.SIZE, common.NodeType.SIZE, max_norm=1.)
         # self.edgetype_embedding = nn.Embedding(common.EdgeType.SIZE, 4, max_norm=1.)
-        self.use_current_obstacle_pos = use_current_obstacle_pos
         self.n_coarse_levels = n_coarse_levels
 
         self.vertexlevel_embedding = nn.Embedding(self.n_coarse_levels + 1, 4, max_norm=1.)
@@ -92,7 +88,7 @@ class Model(nn.Module):
             example = sample.get_example(i)
 
             vertices_cloth = example['cloth'].pos
-            vertices_obstacle_prev = example['obstacle'].prev_pos
+            vertices_obstacle_prev = example['obstacle'].pos
             obstacle_vertex_type = example['obstacle'].vertex_type
 
             indices_from, indices_to = compute_connectivity_pt(vertices_cloth, vertices_obstacle_prev,
@@ -171,8 +167,8 @@ class Model(nn.Module):
 
     def _create_world_edge_set(self, sample, is_training):
         cloth_pos = sample['cloth'].pos
-        obstacle_pos = sample['obstacle'].pos
-        obstacle_prev_pos = sample['obstacle'].prev_pos
+        obstacle_pos = sample['obstacle'].target_pos
+        obstacle_prev_pos = sample['obstacle'].pos
 
         edges_direct = sample['cloth', 'world_edge', 'obstacle'].edge_index
         edges_inverse = sample['obstacle', 'world_edge', 'cloth'].edge_index
@@ -228,7 +224,10 @@ class Model(nn.Module):
 
     def add_velocities(self, sample):
         for k in ['cloth', 'obstacle']:
-            velocity = sample[k].pos - sample[k].prev_pos
+            if k == 'cloth':
+                velocity = sample[k].pos - sample[k].prev_pos
+            else:
+                velocity = sample[k].target_pos - sample[k].pos
             sample = add_field_to_pyg_batch(sample, 'velocity', velocity, k, 'pos')
         return sample
 
@@ -337,10 +336,6 @@ class Model(nn.Module):
     def _normalize(self, sample, is_training):
         """Builds input graph."""
 
-        if self.use_current_obstacle_pos:
-            sample['obstacle'].prev_pos = sample['obstacle'].pos
-            sample['obstacle'].pos = sample['obstacle'].target_pos
-
         sample = self.replace_pinned_verts(sample)
 
         # construct graph edges
@@ -373,17 +368,22 @@ class Model(nn.Module):
         target_position = sample['cloth'].target_pos
 
         velocity = cur_position - prev_position
-        position = cur_position + velocity + acceleration
+        pred_velocity = velocity + acceleration
+        target_velocity = target_position - cur_position
+        pred_velocity = pred_velocity * torch.logical_not(pinned_mask) + target_velocity * pinned_mask
+
+        position = cur_position + pred_velocity
         position = position * torch.logical_not(pinned_mask) + target_position * pinned_mask
 
         sample = add_field_to_pyg_batch(sample, 'pred_pos', position, 'cloth', 'pos')
+        sample = add_field_to_pyg_batch(sample, 'pred_velocity', pred_velocity, 'cloth', 'pos')
 
         target_acceleration = target_position - 2 * cur_position + prev_position
         target_acceleration_norm = self._output_normalizer(target_acceleration, is_training)
         sample = add_field_to_pyg_batch(sample, 'target_acceleration', target_acceleration_norm, 'cloth', 'pos')
         return sample
 
-    def forward(self, inputs, is_training=True):  # TODO: set proper .eval() and .train() functions
+    def forward(self, inputs, is_training=True):
         sample = self._normalize(inputs, is_training=is_training)
         sample = self._learned_model(sample)
         sample = self._get_position(sample, is_training=is_training)
