@@ -93,7 +93,7 @@ class Model(nn.Module):
             example = sample.get_example(i)
 
             vertices_cloth = example['cloth'].pos
-            vertices_obstacle_prev = example['obstacle'].prev_pos
+            vertices_obstacle_prev = example['obstacle'].pos
             obstacle_vertex_type = example['obstacle'].vertex_type
 
             indices_from, indices_to = compute_connectivity_pt(vertices_cloth, vertices_obstacle_prev,
@@ -173,8 +173,8 @@ class Model(nn.Module):
 
     def _create_world_edge_set(self, sample, is_training):
         cloth_pos = sample['cloth'].pos
-        obstacle_pos = sample['obstacle'].pos
-        obstacle_prev_pos = sample['obstacle'].prev_pos
+        obstacle_pos = sample['obstacle'].target_pos
+        obstacle_prev_pos = sample['obstacle'].pos
 
         edges_direct = sample['cloth', 'world_edge', 'obstacle'].edge_index
         edges_inverse = sample['obstacle', 'world_edge', 'cloth'].edge_index
@@ -228,13 +228,14 @@ class Model(nn.Module):
 
         return sample
 
-
     def add_velocities(self, sample):
         for k in ['cloth', 'obstacle']:
-            velocity = sample[k].pos - sample[k].prev_pos
+            if k == 'cloth':
+                velocity = sample[k].pos - sample[k].prev_pos
+            else:
+                velocity = sample[k].target_pos - sample[k].pos
             sample = add_field_to_pyg_batch(sample, 'velocity', velocity, k, 'pos')
         return sample
-
 
     def add_vertex_type_embedding(self, sample):
         for k in ['cloth', 'obstacle']:
@@ -330,10 +331,6 @@ class Model(nn.Module):
 
     def _normalize(self, sample, is_training):
         """Builds input graph."""
-
-        if self.use_current_obstacle_pos:
-            sample['obstacle'].prev_pos = sample['obstacle'].pos
-            sample['obstacle'].pos = sample['obstacle'].target_pos
 
         sample = self.replace_pinned_verts(sample)
 

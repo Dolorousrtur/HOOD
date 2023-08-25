@@ -105,7 +105,6 @@ if __name__ == '__main__':
         checkpoint_path = Path(DEFAULTS.data_root) / 'trained_models' / 'fine15.pth'
         model_config = 'cvpr_baselines/fine15'
 
-        print('***********************FINE15***********************')
     elif conf.model == 'fine48':
         checkpoint_path = Path(DEFAULTS.data_root) / 'trained_models' / 'fine48.pth'
         model_config = 'cvpr_baselines/fine48'
