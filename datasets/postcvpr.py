@@ -638,8 +638,6 @@ class BodyBuilder:
             sample['obstacle'].vertex_type torch.LongTensor [Vx1]: vertex type (1 - regular obstacle, 2 - omitted)
             sample['obstacle'].vertex_level torch.LongTensor [Vx1]: level of the vertex in the hierarchy (always 0 for the body)
 
-
-        
         """
 
         sample = self.vertex_builder.add_verts(sample, sequence_dict, idx, self.make_smpl_vertices, "obstacle")

@@ -373,17 +373,22 @@ class Model(nn.Module):
         target_position = sample['cloth'].target_pos
 
         velocity = cur_position - prev_position
-        position = cur_position + velocity + acceleration
+        pred_velocity = velocity + acceleration
+        target_velocity = target_position - cur_position
+        pred_velocity = pred_velocity * torch.logical_not(pinned_mask) + target_velocity * pinned_mask
+
+        position = cur_position + pred_velocity
         position = position * torch.logical_not(pinned_mask) + target_position * pinned_mask
 
         sample = add_field_to_pyg_batch(sample, 'pred_pos', position, 'cloth', 'pos')
+        sample = add_field_to_pyg_batch(sample, 'pred_velocity', pred_velocity, 'cloth', 'pos')
 
         target_acceleration = target_position - 2 * cur_position + prev_position
         target_acceleration_norm = self._output_normalizer(target_acceleration, is_training)
         sample = add_field_to_pyg_batch(sample, 'target_acceleration', target_acceleration_norm, 'cloth', 'pos')
         return sample
 
-    def forward(self, inputs, is_training=True):  # TODO: set proper .eval() and .train() functions
+    def forward(self, inputs, is_training=True):
         sample = self._normalize(inputs, is_training=is_training)
         sample = self._learned_model(sample)
         sample = self._get_position(sample, is_training=is_training)

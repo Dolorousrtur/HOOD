@@ -1,12 +1,14 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import torch
 from omegaconf import OmegaConf, MISSING, DictConfig
 from torch.utils.data import DataLoader
 
-from utils.arguments import create_runner, create_dataloader_module
+from utils.arguments import create_runner, create_dataloader_module, load_module
+from utils.defaults import DEFAULTS
 
 
 @dataclass
@@ -63,25 +65,25 @@ def update_config_for_validation(experiment_config: DictConfig, validation_confi
     """
     dataset_name = list(experiment_config.dataloader.dataset.keys())[0]
 
-    if validation_config.data_root is not None:
+    if hasattr(validation_config, "data_root") and validation_config.data_root is not None:
         experiment_config.dataloader.dataset[dataset_name].data_root = validation_config.data_root
-    if validation_config.smpl_model is not None:
+    if hasattr(validation_config, "smpl_model") and validation_config.smpl_model is not None:
         experiment_config.dataloader.dataset[dataset_name].smpl_model = validation_config.smpl_model
-    if validation_config.split_path is not None:
+    if hasattr(validation_config, "split_path") and validation_config.split_path is not None:
         experiment_config.dataloader.dataset[dataset_name].split_path = validation_config.split_path
-    if validation_config.garment_dict_file is not None:
+    if hasattr(validation_config, "garment_dict_file") and validation_config.garment_dict_file is not None:
         experiment_config.dataloader.dataset[dataset_name].garment_dict_file = validation_config.garment_dict_file
-    if validation_config.restpos_scale is not None:
+    if hasattr(validation_config, "restpos_scale") and validation_config.restpos_scale is not None:
         experiment_config.dataloader.dataset[dataset_name].restpos_scale_min = validation_config.restpos_scale
         experiment_config.dataloader.dataset[dataset_name].restpos_scale_max = validation_config.restpos_scale
-    if validation_config.separate_arms is not None:
+    if hasattr(validation_config, "separate_arms") and validation_config.separate_arms is not None:
         experiment_config.dataloader.dataset[dataset_name].separate_arms = validation_config.separate_arms
 
-    if validation_config.obstacle_dict_file is not None:
+    if hasattr(validation_config, "obstacle_dict_file") and validation_config.obstacle_dict_file is not None:
         experiment_config.dataloader.dataset[dataset_name].obstacle_dict_file = validation_config.obstacle_dict_file
-    if validation_config.random_betas is not None:
+    if hasattr(validation_config, "random_betas") and validation_config.random_betas is not None:
         experiment_config.dataloader.dataset[dataset_name].random_betas = validation_config.random_betas
-    if validation_config.zero_betas is not None:
+    if hasattr(validation_config, "zero_betas") and validation_config.zero_betas is not None:
         experiment_config.dataloader.dataset[dataset_name].zero_betas = validation_config.zero_betas
 
     experiment_config.dataloader.batch_size = 1
@@ -134,3 +136,17 @@ def create_one_sequence_dataloader(sequence_path: str, garment_name: str, module
     dataloader_m = create_dataloader_module(modules, experiment_config)
     dataloader = dataloader_m.create_dataloader(is_eval=True)
     return dataloader
+
+def replace_model(modules: dict, current_config: DictConfig, model_config_name: str, config_dir: str=None):
+
+
+    if config_dir is None:
+        config_dir = Path(DEFAULTS.project_dir) / 'configs'
+
+    model_config_path = os.path.join(config_dir, model_config_name + '.yaml')
+    model_config = OmegaConf.load(model_config_path)
+
+    current_config.model = OmegaConf.merge(model_config.model, current_config.model)
+    modules['model'] = load_module('models', current_config.model)
+
+    return modules, current_config

@@ -364,10 +364,15 @@ class Model(nn.Module):
         target_position = sample['cloth'].target_pos
 
         velocity = cur_position - prev_position
-        position = cur_position + velocity + acceleration
+        pred_velocity = velocity + acceleration
+        target_velocity = target_position - cur_position
+        pred_velocity = pred_velocity * torch.logical_not(pinned_mask) + target_velocity * pinned_mask
+
+        position = cur_position + pred_velocity
         position = position * torch.logical_not(pinned_mask) + target_position * pinned_mask
 
         sample = add_field_to_pyg_batch(sample, 'pred_pos', position, 'cloth', 'pos')
+        sample = add_field_to_pyg_batch(sample, 'pred_velocity', pred_velocity, 'cloth', 'pos')
 
         target_acceleration = target_position - 2 * cur_position + prev_position
         target_acceleration_norm = self._output_normalizer(target_acceleration, is_training)

@@ -29,6 +29,7 @@ dataloader:
       data_root: 'vto_dataset/smpl_parameters'
       smpl_model: 'smpl/SMPL_FEMALE.pkl'
       garment_dict_file: 'garments_dict.pkl'
+      obstacle_dict_file: 'smpl_aux.pkl'
       split_path: 'datasplits/train.csv'
       lookup_steps: 5
       pinned_verts: True
