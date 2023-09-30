@@ -4,12 +4,13 @@ import pickle
 import networkx as nx
 import numpy as np
 import smplx
+import trimesh
 from sklearn import neighbors
 from tqdm import tqdm
 
 from utils.cloth_and_material import load_obj
 from utils.coarse import make_graph_from_faces, make_coarse_edges
-from utils.common import NodeType
+from utils.common import NodeType, pickle_dump
 from utils.defaults import DEFAULTS
 
 
@@ -211,3 +212,18 @@ def add_garment_to_garments_dict(objfile, garments_dict_file, garment_name, smpl
         pickle.dump(garments_dict, f)
 
     print(f"Garment '{garment_name}' added to {garments_dict_file}")
+
+
+def obj2template(obj_path):
+    vertices, faces = load_obj(obj_path)
+    outer_trimesh = trimesh.Trimesh(vertices=vertices,
+                                    faces=faces, process=True)
+
+    vertices_proc = outer_trimesh.vertices
+    faces_proc = outer_trimesh.faces
+
+    out_dict = dict(vertices=vertices_proc, faces=faces_proc)
+    out_dict = add_coarse_edges(out_dict, 4)
+
+    return out_dict
+

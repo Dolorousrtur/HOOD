@@ -231,4 +231,3 @@ dependencies:
       - tifffile==2023.4.12
       - trimesh==3.21.7
       - websockets==11.0.3
-prefix: /local/home/agrigorev/miniconda3/envs/hood
