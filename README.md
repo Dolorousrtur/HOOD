@@ -63,7 +63,7 @@ export HOOD_PROJECT=/path/to/this/repository
 ```
 
 #### SMPL models
-Download the SMPL models using this [link](https://smpl-x.is.tue.mpg.de/). Unpack them into the `$HOOD_DATA/aux_data/smpl` folder.
+Download the SMPL models using this [link](https://smpl.is.tue.mpg.de/). Unpack them into the `$HOOD_DATA/aux_data/smpl` folder.
 
 In the end your `$HOOD_DATA` folder should look like this:
 ```
