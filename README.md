@@ -5,7 +5,7 @@
 
 This is a repository with training and inference code for the paper [**"HOOD: Hierarchical Graphs for Generalized Modelling of Clothing Dynamics"**](https://arxiv.org/abs/2212.07242) (CVPR2023).
 
-*Latest update: 25.08.2023, code for generating validation sequences added*
+*Latest update: 30.09.2023, added notebook and config for running inference with any mesh sequence or SMPL pose sequence from a garment mesh in arbitrary pose*
 
 ## Installation
 
@@ -89,6 +89,7 @@ The jupyter notebook [Inference.ipynb](Inference.ipynb) contains an example of h
 
 It also has examples of such use-cases as adding a new garment from an .obj file and converting sequences from [AMASS](https://amass.is.tue.mpg.de/) and [VTO](https://github.com/isantesteban/vto-dataset) datasets to the format used in HOOD.
 
+To run inference starting from arbitrary garment pose and arbitrary mesh sequence refer to the [InferenceFromMeshSequence.ipynb](InferenceFromMeshSequence.ipynb) notebook.  
 
 ## Training
 To train a new HOOD model from scratch, you need to first download the [VTO](https://github.com/isantesteban/vto-dataset) dataset and convert it to our format.
