@@ -113,7 +113,7 @@ See the [RepoIntro.md](RepoIntro.md) for more details on the repository structur
 If you use this repository in your paper, please cite:
 ```
       @inproceedings{grigorev2022hood,
-      author = {Grigorev, Artur and Thomaszewski, Bernhard and Black, Michael J and Hilliges, Otmar}, 
+      author = {Grigorev, Artur and Thomaszewski, Bernhard and Black, Michael J. and Hilliges, Otmar}, 
       title = {{HOOD}: Hierarchical Graphs for Generalized Modelling of Clothing Dynamics}, 
       journal = {Computer Vision and Pattern Recognition (CVPR)},
       year = {2023},
