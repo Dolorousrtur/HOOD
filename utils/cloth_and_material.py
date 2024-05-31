@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch_geometric.data import Batch
+from pytorch3d import io as pt3dio
 
 from utils.common import gather, unsorted_segment_sum, add_field_to_pyg_batch
 
@@ -516,6 +517,19 @@ def load_obj(filename, tex_coords=False):
         return vertices, faces, uvs, faces_uv
 
     return vertices, faces
+
+
+def save_obj(filename, verts, faces):
+    if type(verts) != torch.Tensor:
+        verts = torch.FloatTensor(verts)
+    if type(faces) != torch.Tensor:
+        faces = torch.LongTensor(faces)
+
+    verts = verts.cpu().detach()
+    faces = faces.cpu().detach()
+
+    pt3dio.save_obj(filename, verts, faces)
+
 
 
 class VertexNormals(nn.Module):

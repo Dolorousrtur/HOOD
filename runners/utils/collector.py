@@ -7,9 +7,10 @@ class SampleCollector:
     """
     Helper class to collect data from a sequence for a particular rollout step
     """
-    def __init__(self, mcfg, obstacle=True):
+    def __init__(self, mcfg, obstacle=True, no_target=False):
         self.mcfg = mcfg
         self.obstacle = obstacle
+        self.no_target = no_target
         self.objects = ['cloth', 'obstacle'] if self.obstacle else ['cloth']
 
     def copy_from_prev(self, sample, prev_sample):
@@ -80,7 +81,13 @@ class SampleCollector:
     def sequence2sample(self, sample, idx):
         for obj in self.objects:
             for k in ['pos', 'prev_pos', 'target_pos']:
-                v = sample[obj][k]
-                v = v[:, idx]
-                sample[obj][k] = v
+                idx_c = idx
+                k_from = k
+                k_to = k
+                if self.no_target and obj == 'cloth':
+                    idx_c = 0
+
+                v = sample[obj][k_from]
+                v = v[:, idx_c]
+                sample[obj][k_to] = v
         return sample

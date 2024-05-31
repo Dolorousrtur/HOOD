@@ -5,7 +5,7 @@
 
 This is a repository with training and inference code for the paper [**"HOOD: Hierarchical Graphs for Generalized Modelling of Clothing Dynamics"**](https://arxiv.org/abs/2212.07242) (CVPR2023).
 
-*Latest update: 06.07.2023, code for computing metrics over the validation sequences added*
+*Latest update: 30.09.2023, added notebook and config for running inference with any mesh sequence or SMPL pose sequence from a garment mesh in arbitrary pose*
 
 ## Installation
 
@@ -63,7 +63,7 @@ export HOOD_PROJECT=/path/to/this/repository
 ```
 
 #### SMPL models
-Download the SMPL models using this [link](https://smpl-x.is.tue.mpg.de/). Unpack them into the `$HOOD_DATA/aux_data/smpl` folder.
+Download the SMPL models using this [link](https://smpl.is.tue.mpg.de/). Unpack them into the `$HOOD_DATA/aux_data/smpl` folder.
 
 In the end your `$HOOD_DATA` folder should look like this:
 ```
@@ -89,6 +89,7 @@ The jupyter notebook [Inference.ipynb](Inference.ipynb) contains an example of h
 
 It also has examples of such use-cases as adding a new garment from an .obj file and converting sequences from [AMASS](https://amass.is.tue.mpg.de/) and [VTO](https://github.com/isantesteban/vto-dataset) datasets to the format used in HOOD.
 
+To run inference starting from arbitrary garment pose and arbitrary mesh sequence refer to the [InferenceFromMeshSequence.ipynb](InferenceFromMeshSequence.ipynb) notebook.  
 
 ## Training
 To train a new HOOD model from scratch, you need to first download the [VTO](https://github.com/isantesteban/vto-dataset) dataset and convert it to our format.
@@ -112,7 +113,7 @@ See the [RepoIntro.md](RepoIntro.md) for more details on the repository structur
 If you use this repository in your paper, please cite:
 ```
       @inproceedings{grigorev2022hood,
-      author = {Grigorev, Artur and Thomaszewski, Bernhard and Black, Michael J and Hilliges, Otmar}, 
+      author = {Grigorev, Artur and Thomaszewski, Bernhard and Black, Michael J. and Hilliges, Otmar}, 
       title = {{HOOD}: Hierarchical Graphs for Generalized Modelling of Clothing Dynamics}, 
       journal = {Computer Vision and Pattern Recognition (CVPR)},
       year = {2023},
