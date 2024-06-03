@@ -70,7 +70,7 @@ def sample_skinningweights(points, smpl_tree, sigmas, smpl_model):
     return garment_shapedirs, garment_posedirs, garment_lbs_weights
 
 
-def make_lbs_dict(obj_file, smpl_file, n_samples=0):
+def make_lbs_dict(garment_template, garment_faces, smpl_file, n_samples=0):
     """
     Collect linear blend skinning weights for a garment mesh
     :param obj_file:
@@ -82,7 +82,6 @@ def make_lbs_dict(obj_file, smpl_file, n_samples=0):
     smpl_model = smplx.SMPL(smpl_file)
     smplx_v_rest_pose = smpl_model().vertices[0].detach().cpu().numpy()
 
-    garment_template, garment_faces = load_obj(obj_file, tex_coords=False)
 
     smpl_tree = neighbors.KDTree(smplx_v_rest_pose)
     distances, nn_list = smpl_tree.query(garment_template)
@@ -121,11 +120,10 @@ def make_lbs_dict(obj_file, smpl_file, n_samples=0):
     return out_dict
 
 
-def make_restpos_dict(objfile):
+def make_restpos_dict(vertices_full, faces_full):
     """
     Create a dictionary for a garment from an obj file
     """
-    vertices_full, faces_full = load_obj(objfile, tex_coords=False)
 
     restpos_dict = dict()
     restpos_dict['rest_pos'] = vertices_full
@@ -157,21 +155,28 @@ def make_garment_dict(obj_file, smpl_file, coarse=True, n_coarse_levels=4, train
     """
     Create a dictionary for a garment from an obj file
     """
+    vertices_full, faces_full = load_obj(obj_file, tex_coords=False)
+    outer_trimesh = trimesh.Trimesh(vertices=vertices_full,
+                                    faces=faces_full, process=True)
 
-    garment_dict = make_restpos_dict(obj_file)
+    vertices_full = outer_trimesh.vertices
+    faces_full = outer_trimesh.faces
+
+    garment_dict = make_restpos_dict(vertices_full, faces_full)
+
 
 
     if training:
         if verbose:
             print('Sampling LBS weights...')
-        lbs = make_lbs_dict(obj_file, smpl_file, n_samples=n_samples_lbs)
+        lbs = make_lbs_dict(vertices_full, faces_full, smpl_file, n_samples=n_samples_lbs)
         garment_dict['lbs'] = lbs
         if verbose:
             print('Done.')
 
     if coarse:
         if verbose:
-            print('Adding coarse edges...')
+            print('Adding coarse edges... (may take a while)')
         garment_dict = add_coarse_edges(garment_dict, n_levels=n_coarse_levels)
         if verbose:
             print('Done.')
@@ -214,16 +219,20 @@ def add_garment_to_garments_dict(objfile, garments_dict_file, garment_name, smpl
     print(f"Garment '{garment_name}' added to {garments_dict_file}")
 
 
-def obj2template(obj_path):
-    vertices, faces = load_obj(obj_path)
-    outer_trimesh = trimesh.Trimesh(vertices=vertices,
-                                    faces=faces, process=True)
+def obj2template(obj_path, verbose=False):
+    # vertices, faces = load_obj(obj_path)
+    # outer_trimesh = trimesh.Trimesh(vertices=vertices,
+    #                                 faces=faces, process=True)
 
-    vertices_proc = outer_trimesh.vertices
-    faces_proc = outer_trimesh.faces
+    # vertices_proc = outer_trimesh.vertices
+    # faces_proc = outer_trimesh.faces
 
-    out_dict = dict(vertices=vertices_proc, faces=faces_proc)
-    out_dict = add_coarse_edges(out_dict, 4)
+    # out_dict = dict(vertices=vertices_proc, faces=faces_proc)
+    # out_dict = add_coarse_edges(out_dict, 4)
+
+    
+    out_dict = make_garment_dict(obj_path, None, coarse=True, training=False, verbose=verbose)
 
     return out_dict
+
 

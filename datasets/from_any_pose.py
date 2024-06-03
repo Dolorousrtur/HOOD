@@ -23,7 +23,7 @@ class Config:
     pose_sequence_type: str = "smpl"  # "smpl" | "mesh" if "smpl" the pose_sequence_path is a sequence of SMPL parameters, if "mesh" the pose_sequence_path is a sequence of meshes
     smpl_model: Optional[str] = None  # Path to the SMPL model relative to $HOOD_DATA/aux_data/
     obstacle_dict_file: Optional[str] = None  # Path to the file with auxiliary data for obstacles relative to $HOOD_DATA/aux_data/
-    n_coarse_levels: int = 4  # Number of coarse levels with long-range edges
+    n_coarse_levels: int = 3  # Number of coarse levels with long-range edges
     separate_arms: bool = False  # Whether to separate the arms from the rest of the body (to avoid body self-intersections)
 
 
@@ -154,13 +154,19 @@ class GarmentBuilder:
         self.vertex_builder = VertexBuilder(mcfg)
 
     def add_verts(self, sample: HeteroData, garment_dict: dict) -> HeteroData:
-        pos = garment_dict['vertices']
+
+        if 'vertices' in garment_dict:
+            pos = garment_dict['vertices']
+        else:
+            pos = garment_dict['rest_pos']
+
         pos = torch.FloatTensor(pos)[None,].permute(1, 0, 2)
 
         sample['cloth'].prev_pos = pos
         sample['cloth'].pos = pos
         sample['cloth'].target_pos = pos
         sample['cloth'].rest_pos = pos[:, 0]
+        
 
         return sample
 
@@ -329,10 +335,6 @@ class SMPLBodyBuilder:
         """
 
         input_dict = {k: torch.FloatTensor(v) for k, v in sequence_dict.items()}
-
-        for k, v in input_dict.items():
-            print(k, v.shape)
-
         with torch.no_grad():
             smpl_output = self.smpl_model(**input_dict)
         vertices = smpl_output.vertices.numpy().astype(np.float32)

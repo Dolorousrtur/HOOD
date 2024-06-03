@@ -20,10 +20,10 @@ dataloader:
   dataset:
     from_any_pose:
       smpl_model: 'smpl/SMPL_FEMALE.pkl'
-#      pose_sequence_type: "smpl"
-#      pose_sequence_path: 'fromanypose/pose_sequence.pkl'
-      pose_sequence_type: "mesh"
-      pose_sequence_path: 'fromanypose/mesh_sequence.pkl'
+      pose_sequence_type: "smpl"
+      pose_sequence_path: 'fromanypose/pose_sequence.pkl'
+      # pose_sequence_type: "mesh"
+      # pose_sequence_path: 'fromanypose/mesh_sequence.pkl'
       garment_template_path: 'fromanypose/tshirt.pkl'
       n_coarse_levels: 3
 
