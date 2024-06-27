@@ -444,6 +444,7 @@ class GarmentBuilder:
         if 'coarse_edges' not in garment_dict:
             garment_dict['coarse_edges'] = dict()
 
+
         # if coarse edges are already precomputed for the given `center`,
         # take them from `garment_dict['coarse_edges'][center]`
         # else compute them with `make_coarse_edges` and stash in `garment_dict['coarse_edges'][center]`

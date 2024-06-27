@@ -1,3 +1,4 @@
+import itertools
 import os
 import pickle
 
@@ -151,22 +152,78 @@ def make_restpos_dict(vertices_full, faces_full):
     return restpos_dict
 
 
-def add_coarse_edges(garment_dict, n_levels=4):
-    """
-    Add coarse edges to a garment dictionary
-    """
+# def add_coarse_edges(garment_dict, n_levels=4):
+#     """
+#     Add coarse edges to a garment dictionary
+#     """
 
+#     faces = garment_dict['faces']
+#     G = make_graph_from_faces(faces)
+
+#     center_nodes = nx.center(G)
+#     garment_dict['center'] = center_nodes
+#     garment_dict['coarse_edges'] = dict()
+#     for center in center_nodes:
+#         coarse_edges_dict = make_coarse_edges(faces, center, n_levels=n_levels)
+#         garment_dict['coarse_edges'][center] = coarse_edges_dict
+
+#     return garment_dict
+
+
+
+def add_coarse_edges(garment_dict, n_levels=4):
     faces = garment_dict['faces']
     G = make_graph_from_faces(faces)
 
-    center_nodes = nx.center(G)
-    garment_dict['center'] = center_nodes
-    garment_dict['coarse_edges'] = dict()
-    for center in center_nodes:
-        coarse_edges_dict = make_coarse_edges(faces, center, n_levels=n_levels)
-        garment_dict['coarse_edges'][center] = coarse_edges_dict
+    components = list(nx.connected_components(G))
+
+    cGd_list = []
+    for component in components:
+        cg_dict = dict()
+
+        cG = G.subgraph(component)
+        component_ids = np.array(list(component))
+        faces_mask = np.isin(faces, component_ids).all(axis=1)
+
+        faces_component = faces[faces_mask]
+
+        center_nodes = nx.center(cG)
+
+        # continue
+        cg_dict['center'] = center_nodes
+        cg_dict['coarse_edges'] = dict()
+
+        for center in center_nodes[:3]:
+            # print('center', center)
+            coarse_edges_dict = make_coarse_edges(faces_component, center, n_levels=n_levels)
+            cg_dict['coarse_edges'][center] = coarse_edges_dict
+        cGd_list.append(cg_dict)
+
+    cGdk_list = [d['coarse_edges'].keys() for d in cGd_list]
+    ctuples = list(itertools.product(*cGdk_list))
+
+
+    center_list = []
+    coarse_edges_dict = dict()
+    for ci, ctuple in enumerate(ctuples):
+        center_list.append(ci)
+        coarse_edges_dict[ci] = dict()
+
+        for l in range(n_levels):
+            ce_list = []
+            for i, d in enumerate(cGd_list):
+                ce_list.append(d['coarse_edges'][ctuple[i]][l])
+
+            ce_list = np.concatenate(ce_list, axis=0)
+
+            coarse_edges_dict[ci][l] = ce_list
+
+
+    garment_dict['center'] = np.array(center_list)
+    garment_dict['coarse_edges'] = coarse_edges_dict
 
     return garment_dict
+
 
 
 def make_garment_dict(obj_file, smpl_file, coarse=True, n_coarse_levels=4, training=True, n_samples_lbs=0, verbose=False):
