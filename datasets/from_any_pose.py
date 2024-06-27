@@ -25,7 +25,7 @@ class Config:
     obstacle_dict_file: Optional[str] = None  # Path to the file with auxiliary data for obstacles relative to $HOOD_DATA/aux_data/
     n_coarse_levels: int = 3  # Number of coarse levels with long-range edges
     separate_arms: bool = False  # Whether to separate the arms from the rest of the body (to avoid body self-intersections)
-
+    pinned_verts: bool = True  # Whether to use pinned vertices
 
 
 def make_obstacle_dict(mcfg: Config) -> dict:
@@ -155,12 +155,15 @@ class GarmentBuilder:
 
     def add_verts(self, sample: HeteroData, garment_dict: dict) -> HeteroData:
 
+        n_frames = sample['obstacle'].pos.shape[1]
+
         if 'vertices' in garment_dict:
             pos = garment_dict['vertices']
         else:
             pos = garment_dict['rest_pos']
 
         pos = torch.FloatTensor(pos)[None,].permute(1, 0, 2)
+        pos = pos.repeat(1, n_frames, 1)
 
         sample['cloth'].prev_pos = pos
         sample['cloth'].pos = pos
@@ -170,7 +173,8 @@ class GarmentBuilder:
 
         return sample
 
-    def add_vertex_type(self, sample: HeteroData, garment_dict: dict) -> HeteroData:
+    
+    def add_vertex_type(self, sample: HeteroData, garment_dict: str) -> HeteroData:
         """
         Add `vertex_type` tensor to `sample['cloth']`
 
@@ -186,8 +190,13 @@ class GarmentBuilder:
         :return: sample['cloth'].vertex_type: torch.LongTensor [Vx1]
         """
 
-        V = sample['cloth'].pos.shape[0]
-        vertex_type = np.zeros((V, 1)).astype(np.int64)
+        if self.mcfg.pinned_verts and 'node_type' in garment_dict:
+            vertex_type = garment_dict['node_type'].astype(np.int64)
+        else:
+            V = sample['cloth'].pos.shape[0]
+            vertex_type = np.zeros((V, 1)).astype(np.int64)
+
+        print(np.unique(vertex_type))
 
         sample['cloth'].vertex_type = torch.tensor(vertex_type)
         return sample
@@ -277,6 +286,204 @@ class GarmentBuilder:
         sample = self.make_vertex_level(sample, coarse_edges_dict)
 
         return sample
+    
+    def find_closest_faces(self, pinned_pos, obstacle_pos, obstacle_faces, distance_threshold=3e-2):
+        N = pinned_pos.size(0)
+        F = obstacle_faces.size(0)
+        
+        # Get the vertices of each face
+        v0 = obstacle_pos[obstacle_faces[:, 0]]  # (F, 3)
+        v1 = obstacle_pos[obstacle_faces[:, 1]]  # (F, 3)
+        v2 = obstacle_pos[obstacle_faces[:, 2]]  # (F, 3)
+
+        face_centers = (v0 + v1 + v2) / 3  # (F, 3)
+        
+        # Calculate the normal vectors for each face
+        v0v1 = v1 - v0  # (F, 3)
+        v0v2 = v2 - v0  # (F, 3)
+        normals = torch.cross(v0v1, v0v2)  # (F, 3)
+        normal_lengths = torch.norm(normals, dim=1, keepdim=True)  # (F, 1)
+        
+        # Normalize the normals
+        normals = normals / normal_lengths  # (F, 3)
+        
+        # Calculate the distances from each point to each face
+        pinned_pos_expanded = pinned_pos.unsqueeze(1).expand(N, F, 3)  # (N, F, 3)
+        v0_expanded = v0.unsqueeze(0).expand(N, F, 3)  # (N, F, 3)
+        
+        vectors_to_points = pinned_pos_expanded - v0_expanded  # (N, F, 3)
+        distances_to_planes = torch.abs(torch.sum(vectors_to_points * normals.unsqueeze(0), dim=2)) / normal_lengths.t()  # (N, F)
+        distances_to_centers = torch.norm(pinned_pos_expanded - face_centers.unsqueeze(0), dim=2)  # (N, F)
+
+        # Project points onto the plane of each face
+        projections = pinned_pos_expanded - normals.unsqueeze(0) * torch.sum(vectors_to_points * normals.unsqueeze(0), dim=2, keepdim=True)  # (N, F, 3)
+        
+        # Compute barycentric coordinates
+        v2v0 = -v0v2  # (F, 3)
+        d00 = torch.sum(v0v1 * v0v1, dim=1)  # (F,)
+        d01 = torch.sum(v0v1 * v0v2, dim=1)  # (F,)
+        d11 = torch.sum(v0v2 * v0v2, dim=1)  # (F,)
+        denom = d00 * d11 - d01 * d01  # (F,)
+        
+        p_to_v0 = projections - v0_expanded  # (N, F, 3)
+        d20 = torch.sum(p_to_v0 * v0v1.unsqueeze(0), dim=2)  # (N, F)
+        d21 = torch.sum(p_to_v0 * v0v2.unsqueeze(0), dim=2)  # (N, F)
+        
+        v = (d11 * d20 - d01 * d21) / denom.unsqueeze(0)  # (N, F)
+        w = (d00 * d21 - d01 * d20) / denom.unsqueeze(0)  # (N, F)
+        u = 1.0 - v - w  # (N, F)
+        
+        # Check if the projection falls inside the face
+        inside_face = (u >= 0) & (v >= 0) & (w >= 0)  # (N, F)
+        
+        # Set distances to infinity where the projection is outside the face
+        distances_to_planes_filtered = torch.where(inside_face, distances_to_planes, torch.full_like(distances_to_planes, float('inf')))
+
+        # Set distances to the centers where the projection is outside all the faces
+        # all_noinside_mask = ~inside_face.any(dim=1)
+        over_the_threshold_mask = distances_to_centers > distance_threshold
+        exclude_pairs_mask = ~inside_face | over_the_threshold_mask
+        exclude_nodes_mask = exclude_pairs_mask.all(dim=1)
+
+        distances_to_planes_filtered[exclude_nodes_mask] = distances_to_centers[exclude_nodes_mask]
+
+        # distances_to_planes_filtered = distances_to_centers
+
+        # print('distances_to_centers', distances_to_centers.shape)
+        # print('all_noinside_mask', all_noinside_mask)
+        
+        # Find the closest face for each point
+        closestface_id = torch.argmin(distances_to_planes_filtered, dim=1)  # (N,)
+
+        distances = torch.min(distances_to_planes_filtered, dim=1).values  # (N,)
+        
+        return closestface_id
+
+    
+    def compute_barycentric_coordinates(self, pinned_pos, obstacle_pos, obstacle_faces, closestface_id):
+        # Extract the vertices of the closest faces
+        v0 = obstacle_pos[obstacle_faces[closestface_id, 0]]  # (N, 3)
+        v1 = obstacle_pos[obstacle_faces[closestface_id, 1]]  # (N, 3)
+        v2 = obstacle_pos[obstacle_faces[closestface_id, 2]]  # (N, 3)
+
+        # Compute the vectors relative to the vertices of the triangle
+        v0v1 = v1 - v0  # (N, 3)
+        v0v2 = v2 - v0  # (N, 3)
+        v0p = pinned_pos - v0  # (N, 3)
+
+        # Compute dot products
+        d00 = torch.sum(v0v1 * v0v1, dim=1)  # (N,)
+        d01 = torch.sum(v0v1 * v0v2, dim=1)  # (N,)
+        d11 = torch.sum(v0v2 * v0v2, dim=1)  # (N,)
+        d20 = torch.sum(v0p * v0v1, dim=1)   # (N,)
+        d21 = torch.sum(v0p * v0v2, dim=1)   # (N,)
+
+        # Compute the denominator of the barycentric coordinates
+        denom = d00 * d11 - d01 * d01  # (N,)
+
+        # Compute the barycentric coordinates
+        v = (d11 * d20 - d01 * d21) / denom  # (N,)
+        w = (d00 * d21 - d01 * d20) / denom  # (N,)
+        u = 1.0 - v - w  # (N,)
+
+        # Stack the barycentric coordinates into a tensor
+        barycoords = torch.stack([u, v, w], dim=1)  # (N, 3)
+
+        # Compute the normal vectors for each face
+        normals = torch.cross(v0v1, v0v2)  # (N, 3)
+        normal_lengths = torch.norm(normals, dim=1, keepdim=True)  # (N, 1)
+        normals = normals / normal_lengths  # (N, 3)
+
+        # Compute the distances from each point to the plane of the face
+        ndists = torch.sum((pinned_pos - v0) * normals, dim=1, keepdim=True)  # (N, 1)
+
+        return barycoords, ndists
+    
+
+    def compute_pinned_target_pos(self, obstacle_pos_sequence, obstacle_faces, closestface_id, barycoords, ndists):
+        obstacle_pos_sequence = obstacle_pos_sequence.permute(1,0,2)
+
+        # Extract the barycentric coordinates
+        u = barycoords[:, 0].unsqueeze(0)  # (1, N)
+        v = barycoords[:, 1].unsqueeze(0)  # (1, N)
+        w = barycoords[:, 2].unsqueeze(0)  # (1, N)
+
+        print('u', u.shape)
+        
+        # Gather the vertices for the closest faces for all frames
+        v0_indices = obstacle_faces[closestface_id, 0]  # (N,)
+        v1_indices = obstacle_faces[closestface_id, 1]  # (N,)
+        v2_indices = obstacle_faces[closestface_id, 2]  # (N,)
+        
+        v0 = obstacle_pos_sequence[:, v0_indices]  # (K, N, 3)
+        v1 = obstacle_pos_sequence[:, v1_indices]  # (K, N, 3)
+        v2 = obstacle_pos_sequence[:, v2_indices]  # (K, N, 3)
+        print('v0', v0.shape)
+        
+        # Compute the weighted sum of the vertices using the barycentric coordinates
+        pinned_pos_bary = u.unsqueeze(2) * v0 + v.unsqueeze(2) * v1 + w.unsqueeze(2) * v2  # (K, N, 3)
+        
+        # Compute the normal vectors for each face for all frames
+        v0v1 = v1 - v0  # (K, N, 3)
+        v0v2 = v2 - v0  # (K, N, 3)
+        normals = torch.cross(v0v1, v0v2, dim=2)  # (K, N, 3)
+        normal_lengths = torch.norm(normals, dim=2, keepdim=True)  # (K, N, 1)
+        normals = normals / normal_lengths  # (K, N, 3)
+        
+        # Compute the normal distances to add to the barycentric coordinates projection
+        ndists_expanded = ndists.unsqueeze(0)  # (1, N, 1)
+
+
+        pinned_target_pos = pinned_pos_bary + normals * ndists_expanded  # (K, N, 3)
+
+        pinned_target_pos = pinned_target_pos.permute(1, 0, 2)
+        
+        return pinned_target_pos
+        
+    def update_pinned_target(self, sample: HeteroData) -> HeteroData:
+        cloth_target_pos = sample['cloth'].target_pos
+
+
+        cloth_vertex_type = sample['cloth'].vertex_type
+        pinned_mask = cloth_vertex_type == NodeType.HANDLE
+
+        if not pinned_mask.any():
+            return sample
+        
+        pinned_mask = pinned_mask[:, 0]
+
+        obstacle_target_pos = sample['obstacle'].target_pos
+        
+
+
+        cloth_first_frame_pos = sample['cloth'].pos[:, 0]
+        obstacle_first_frame_pos = sample['obstacle'].pos[:, 0]
+
+        obstacle_faces = sample['obstacle'].faces_batch.T
+
+        pinned_nodes_pos = cloth_first_frame_pos[pinned_mask]
+
+        closest_face_ids = self.find_closest_faces(pinned_nodes_pos, obstacle_first_frame_pos, obstacle_faces)
+        barycoords, ndists = self.compute_barycentric_coordinates(pinned_nodes_pos, 
+                                                                  obstacle_first_frame_pos, 
+                                                                  obstacle_faces, 
+                                                                  closest_face_ids)
+        
+
+        pinned_target_pos = self.compute_pinned_target_pos(obstacle_target_pos,
+                                                              obstacle_faces,
+                                                                closest_face_ids,
+                                                                barycoords,
+                                                                ndists)
+        
+
+        cloth_target_pos[pinned_mask] = pinned_target_pos
+
+        sample['cloth'].target_pos = cloth_target_pos
+        return sample
+        
+        # Compute the target positions for the pinned nodes
+
 
     def build(self, sample: HeteroData) -> HeteroData:
         """
@@ -299,6 +506,7 @@ class GarmentBuilder:
         sample = self.add_verts(sample, self.garment_dict)
         sample = self.add_coarse(sample, self.garment_dict)
         sample = self.add_vertex_type(sample, self.garment_dict)
+        sample = self.update_pinned_target(sample)
         sample = self.add_faces_and_edges(sample, self.garment_dict)
 
         return sample
@@ -541,8 +749,8 @@ class Loader:
         """
         sequence = self.sequence_loader.load_sequence(fname)
         sample = HeteroData()
-        sample = self.garment_builder.build(sample)
         sample = self.body_builder.build(sample, sequence)
+        sample = self.garment_builder.build(sample)
         return sample
 
 

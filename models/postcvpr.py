@@ -149,6 +149,7 @@ class Model(nn.Module):
         rest_pos = sample['cloth'].rest_pos  # (v, 3)
         edges = sample['cloth', edge_label, 'cloth'].edge_index.T  # (e, 2)
 
+
         relative_pos = self.get_relative_pos(pos, edges)  # (e, 3)
         relative_pos_norm = torch.norm(relative_pos, dim=-1, keepdim=True)  # (e, 1)
 

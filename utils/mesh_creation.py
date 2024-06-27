@@ -32,6 +32,24 @@ def add_pinned_verts(file, garment_name, pinned_indices):
         pickle.dump(pkl, f)
 
 
+def add_pinned_verts_single_template(file, pinned_indices):
+    """
+    Modify `node_type` field in the pickle file to mark pinned vertices with NodeType.HANDLE
+    :param file: path top the garments dict file
+    :param garment_name: name of the garment to add pinned vertices to
+    :param pinned_indices: list of pinned vertex indices
+    """
+    with open(file, 'rb') as f:
+        pkl = pickle.load(f)
+    node_type = np.zeros_like(pkl['rest_pos'][:, :1])
+    node_type[pinned_indices] = NodeType.HANDLE
+    node_type = node_type.astype(np.int64)
+    pkl['node_type'] = node_type
+
+    with open(file, 'wb') as f:
+        pickle.dump(pkl, f)
+
+
 def add_buttons(file, button_edges):
     with open(file, 'rb') as f:
         pkl = pickle.load(f)

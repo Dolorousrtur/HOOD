@@ -377,8 +377,9 @@ class GarmentBuilder:
         else:
             rest_pos = self.resize_restpos(garment_dict['rest_pos'])
 
-        sample['cloth'].rest_pos = torch.tensor(rest_pos)
+        sample['cloth'].rest_pos = torch.tensor(rest_pos).float()
         return sample
+
 
     def add_faces_and_edges(self, sample: HeteroData, garment_name: str) -> HeteroData:
         """

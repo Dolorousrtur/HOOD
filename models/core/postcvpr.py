@@ -334,6 +334,9 @@ class EncodeProcessDecode(nn.Module):
 
     def _encode_edges(self, sample):
         mesh_edge_features = sample['cloth', 'mesh_edge', 'cloth'].features
+
+
+
         mesh_edge_latents = self.edgeset_encoders['mesh'](mesh_edge_features)
         sample['cloth', 'mesh_edge', 'cloth'].features = mesh_edge_latents
 

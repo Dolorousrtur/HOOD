@@ -2,7 +2,8 @@ experiment:
   name: debug
 
 runner:
-  from_any_pose:
+  # from_any_pose:
+  postcvpr:
     material:
       lame_mu_min: 15909
       lame_mu_max: 63636

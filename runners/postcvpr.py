@@ -151,11 +151,19 @@ class Runner(nn.Module):
             trajectory.append(state['cloth'].pred_pos.detach().cpu().numpy())
             obstacle_trajectory.append(state['obstacle'].target_pos.detach().cpu().numpy())
 
+            # print('WARNING: The following lines are commented out in the original code')
+            # trajectory.append(state['cloth'].prev_pos.detach().cpu().numpy())
+            # obstacle_trajectory.append(state['obstacle'].prev_pos.detach().cpu().numpy())
+
             if not bare:
                 loss_dict = self.criterion_pass(state)
                 for k, v in loss_dict.items():
                     metrics_dict[k].append(v.item())
             prev_out_dict = state.clone()
+
+
+        
+
         return trajectory, obstacle_trajectory, metrics_dict
 
     def collect_sample_wholeseq(self, sequence, index, prev_out_dict):
