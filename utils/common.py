@@ -352,8 +352,8 @@ def separate_arms(poses: np.ndarray, angle=20, left_arm=17, right_arm=16):
     rot = R.from_euler('z', angle, degrees=True)
     poses[:, right_arm] = (rot * R.from_rotvec(poses[:, right_arm])).as_rotvec()
 
-    poses[:, 23] *= 0.1
-    poses[:, 22] *= 0.1
+    # poses[:, 23] *= 0.1
+    # poses[:, 22] *= 0.1
 
     return poses.reshape((poses.shape[0], -1))
 

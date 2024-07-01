@@ -1,3 +1,4 @@
+import importlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,8 @@ from torch.utils.data import DataLoader
 from utils.arguments import create_runner, create_dataloader_module, load_module
 from utils.defaults import DEFAULTS
 
+from utils.dataloader import DataloaderModule
+from utils.arguments import DataConfig as DataloaderConfig
 
 @dataclass
 class Config:
@@ -67,6 +70,8 @@ def update_config_for_validation(experiment_config: DictConfig, validation_confi
 
     if hasattr(validation_config, "data_root") and validation_config.data_root is not None:
         experiment_config.dataloader.dataset[dataset_name].data_root = validation_config.data_root
+
+    # TODO replace with model_type and gender
     if hasattr(validation_config, "smpl_model") and validation_config.smpl_model is not None:
         experiment_config.dataloader.dataset[dataset_name].smpl_model = validation_config.smpl_model
     if hasattr(validation_config, "split_path") and validation_config.split_path is not None:
@@ -122,7 +127,8 @@ def load_runner_from_checkpoint(checkpoint_path: str, modules: dict, experiment_
     return runner_module, runner
 
 
-def create_one_sequence_dataloader(sequence_path: str, garment_name: str, modules: dict,
+
+def create_one_sequence_dataloader_old(sequence_path: str, garment_name: str, modules: dict,
                                    experiment_config: DictConfig) -> DataLoader:
     """
     Create a dataloader for a single pose sequence and a given garment
@@ -133,9 +139,48 @@ def create_one_sequence_dataloader(sequence_path: str, garment_name: str, module
     :return:
     """
     experiment_config = update_config_single_sequence(experiment_config, sequence_path, garment_name)
+
     dataloader_m = create_dataloader_module(modules, experiment_config)
     dataloader = dataloader_m.create_dataloader(is_eval=True)
     return dataloader
+
+
+def create_one_sequence_dataloader(sequence_path: str, garment_name: str, garment_dict_file: str, 
+                                   use_config=None, dataset_name=None, **kwargs) -> DataLoader:
+
+
+    if use_config is not None:
+        config_dir = Path(DEFAULTS.project_dir) / 'configs'
+        config_path = os.path.join(config_dir, use_config + '.yaml')
+        conf_file = OmegaConf.load(config_path)
+
+        dataset_name = list(conf_file.dataloader.dataset.keys())[0]
+        dataset_config_dict = conf_file.dataloader.dataset[dataset_name]
+    else:
+        dataset_config_dict = {}
+
+    dataset_module = importlib.import_module(f'datasets.{dataset_name}')
+    DatasetConfig = dataset_module.Config
+    create_dataset = dataset_module.create
+
+    data_root, file_name = os.path.split(sequence_path)
+    file_name, ext = os.path.splitext(file_name)
+
+    dataset_config_dict['data_root'] = data_root
+    dataset_config_dict['single_sequence_file'] = file_name
+    dataset_config_dict['single_sequence_garment'] = garment_name
+    dataset_config_dict['garment_dict_file'] = garment_dict_file
+    dataset_config_dict.update(kwargs)
+
+
+    config = DatasetConfig(**dataset_config_dict)
+
+
+    dataset = create_dataset(config)
+    dataloader_config = DataloaderConfig(num_workers=0)
+    dataloader = DataloaderModule(dataset, dataloader_config).create_dataloader()
+    return dataloader
+
 
 def replace_model(modules: dict, current_config: DictConfig, model_config_name: str, config_dir: str=None):
 

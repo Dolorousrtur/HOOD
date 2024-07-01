@@ -7,9 +7,8 @@ class GarmentSMPL:
     """
     Generates garment geometry in the given poses using SMPL blend shapes and linear blend skinning.
     """
-
-    def __init__(self, smpl_model, garment_skinning_dict):
-        self.smpl_model = smpl_model
+    def __init__(self, body_model, garment_skinning_dict):
+        self.smpl_model = body_model
         self.garment_skinning_dict = garment_skinning_dict
 
     def make_vertices(self, betas: torch.FloatTensor, full_pose: torch.FloatTensor,
@@ -26,10 +25,13 @@ class GarmentSMPL:
                                                                         self.smpl_model.shapedirs,
                                                                         self.smpl_model.J_regressor,
                                                                         self.smpl_model.parents)
+        
+
         v_garment, _ = my_lbs.pose_garment(betas, full_pose, self.garment_skinning_dict['v'],
                                            self.garment_skinning_dict['shapedirs'],
                                            self.garment_skinning_dict['posedirs'],
-                                           self.garment_skinning_dict['lbs_weights'], J_transformed, joint_transforms)
+                                           self.garment_skinning_dict['lbs_weights'], 
+                                           J_transformed, joint_transforms)
 
         if transl is not None:
             v_garment = v_garment + transl[:, None]

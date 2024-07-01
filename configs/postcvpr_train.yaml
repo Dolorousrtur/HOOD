@@ -21,7 +21,7 @@ runner:
       density_max: 7e-1
 
 dataloader:
-  num_workers: 0
+  num_workers: 8
   batch_size: 1
   pyg_data: True
   dataset:
@@ -33,12 +33,11 @@ dataloader:
       garment_dict_file: 'garments_dict.pkl'
       obstacle_dict_file: 'smpl_aux.pkl'
       split_path: 'datasplits/train.csv'
+      lookup_steps: 5
       pinned_verts: True
-      random_betas: False
+      random_betas: True
+      betas_scale: 3.
       n_coarse_levels: 3
-      separate_arms: True
-      wholeseq: True
-      noise_scale: 0
 
 criterions:
   postcvpr.mataug.stretching_energy:
