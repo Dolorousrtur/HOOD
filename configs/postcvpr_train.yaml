@@ -25,7 +25,7 @@ dataloader:
   batch_size: 1
   pyg_data: True
   dataset:
-    postcvpr2:
+    postcvpr:
       data_root: 'vto_dataset/smpl_parameters'
       body_model_root: 'body_models'
       model_type: 'smpl'

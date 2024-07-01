@@ -26,7 +26,7 @@ dataloader:
   dataset:
     postcvpr:
       data_root: 'aux_data/validation_sequences/pose_sequences'
-      smpl_model: 'smpl/SMPL_FEMALE.pkl'
+      smpl_model: 'body_models/smpl/SMPL_FEMALE.pkl'
       garment_dict_file: 'garments_dict.pkl'
       split_path: 'validation_sequences/datasplits/comparison_seqs_to_snug.csv'
       betas_file: 'validation_sequences/betas.pkl'

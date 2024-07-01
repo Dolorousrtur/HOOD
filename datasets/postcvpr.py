@@ -1,3 +1,4 @@
+import importlib
 import os
 import pickle
 from dataclasses import dataclass, MISSING
@@ -19,12 +20,17 @@ from utils.garment_smpl import GarmentSMPL
 
 @dataclass
 class Config:
-    data_root: str = MISSING  # Path to the data root relative to $HOOD_DATA/
-    smpl_model: str = MISSING  # Path to the SMPL model relative to $HOOD_DATA/aux_data/
     garment_dict_file: str = MISSING  # Path to the garment dict file with data for all garments relative to $HOOD_DATA/aux_data/
+    data_root: str = MISSING  # Path to the data root relative to $HOOD_DATA/
+    body_model_root: str = 'body_models'  # Path to the directory containg body model files, should contain `smpl` and/or `smplx` sub-directories. Relative to $HOOD_DATA/aux_data/
+    model_type: str = 'smpl'  # Type of the body model ('smpl' or 'smplx')
+    gender: str = 'female' # Gender of the body model ('male' | 'female' | 'neutral')    
     split_path: Optional[str] = None  # Path to the .csv split file relative to $HOOD_DATA/aux_data/
     obstacle_dict_file: Optional[
         str] = None  # Path to the file with auxiliary data for obstacles relative to $HOOD_DATA/aux_data/
+    
+
+    sequence_loader: str = 'hood_pkl'  # Name of the sequence loader to use 
     noise_scale: float = 3e-3  # Noise scale for the garment vertices (not used in validation)
     lookup_steps: int = 5  # Number of steps to look up in the future (not used in validation)
     pinned_verts: bool = False  # Whether to use pinned vertices
@@ -45,6 +51,7 @@ class Config:
     betas_file: Optional[
         str] = None  # Path to the file with the table of beta parameters (used in validation to generate sequences with specific body shapes)
 
+    fps: int = 30  # Target FPS for the sequence
 
 def make_obstacle_dict(mcfg: Config) -> dict:
     if mcfg.obstacle_dict_file is None:
@@ -58,12 +65,13 @@ def make_obstacle_dict(mcfg: Config) -> dict:
 
 def create_loader(mcfg: Config):
     garment_dict_path = os.path.join(DEFAULTS.aux_data, mcfg.garment_dict_file)
+
     garments_dict = load_garments_dict(garment_dict_path)
 
-    smpl_model_path = os.path.join(DEFAULTS.aux_data, mcfg.smpl_model)
-    smpl_model = smplx.SMPL(smpl_model_path)
+    body_model_root = os.path.join(DEFAULTS.aux_data, mcfg.body_model_root)
+    body_model = smplx.create(body_model_root, model_type=mcfg.model_type, gender=mcfg.gender, use_pca=False)
 
-    garment_smpl_model_dict = make_garment_smpl_dict(garments_dict, smpl_model)
+    garment_smpl_model_dict = make_garment_smpl_dict(garments_dict, body_model)
     obstacle_dict = make_obstacle_dict(mcfg)
 
     if mcfg.single_sequence_file is None:
@@ -75,7 +83,7 @@ def create_loader(mcfg: Config):
         betas_table = None
 
     loader = Loader(mcfg, garments_dict,
-                    smpl_model, garment_smpl_model_dict, obstacle_dict=obstacle_dict, betas_table=betas_table)
+                    body_model, garment_smpl_model_dict, obstacle_dict=obstacle_dict, betas_table=betas_table)
     return loader
 
 
@@ -114,14 +122,32 @@ class VertexBuilder:
         :return: [Nx3] mesh vertices
         """
 
-        betas = sequence_dict['betas']
-        if len(betas.shape) == 2 and betas.shape[0] != 1:
-            betas = betas[idx_start: idx_end]
+        input_dict = {}
+        n_frames = sequence_dict['body_pose'].shape[0]
 
-        verts = f_make(sequence_dict['body_pose'][idx_start: idx_end],
-                       sequence_dict['global_orient'][idx_start: idx_end],
-                       sequence_dict['transl'][idx_start: idx_end],
-                       betas, garment_name=garment_name)
+        for k in ['betas', 'expression']:
+            if k in sequence_dict:
+                v = sequence_dict[k]
+                if len(v.shape) == 1:
+                    v = v[None]
+
+                if len(v.shape) == 2 and v.shape[0] == 1:
+                    v = v.repeat(n_frames, 0)
+
+                if len(v.shape) == 2 and v.shape[0] != 1:
+                    v = v[idx_start: idx_end]
+                input_dict[k] = v
+
+        for k in ['global_orient', 'body_pose', 'transl', 
+            'left_hand_pose', 'right_hand_pose', 
+            'jaw_pose', 'leye_pose', 'reye_pose']: 
+            if k in sequence_dict:
+                input_dict[k] = sequence_dict[k][idx_start: idx_end]
+
+                
+
+        verts = f_make(input_dict, garment_name=garment_name)
+
 
         return verts
 
@@ -147,6 +173,18 @@ class VertexBuilder:
         if not self.mcfg.wholeseq and pos.shape[1] == 1:
             pos = pos[:, 0]
         return pos
+    
+    def permute_axes(self, vertices: np.ndarray) -> np.ndarray:  
+        if self.mcfg.sequence_loader in ['cmu_npz_smpl', 'cmu_npz_smplx']:
+
+            r_permute = np.array([[1,0,0],
+                        [0,0,-1],
+                        [0,1,0]], dtype=vertices.dtype)
+            
+
+            vertices = vertices @ r_permute
+
+        return vertices
 
     def add_verts(self, sample: HeteroData, sequence_dict: dict, idx: int, f_make, object_key: str,
                   **kwargs) -> HeteroData:
@@ -167,6 +205,7 @@ class VertexBuilder:
         if self.mcfg.wholeseq:
             all_vertices = VertexBuilder.build(sequence_dict, f_make, 0, None,
                                                **kwargs)
+            all_vertices = self.permute_axes(all_vertices)
             pos_dict['prev_pos'] = all_vertices[:-2]
             pos_dict['pos'] = all_vertices[1:-1]
             pos_dict['target_pos'] = all_vertices[2:]
@@ -178,6 +217,7 @@ class VertexBuilder:
                 n_lookup = min(self.mcfg.lookup_steps, N_steps - idx - 2)
             all_vertices = VertexBuilder.build(sequence_dict, f_make, idx, idx + 2 + n_lookup,
                                                **kwargs)
+            all_vertices = self.permute_axes(all_vertices)
             pos_dict["prev_pos"] = all_vertices[:1]
             pos_dict["pos"] = all_vertices[1:2]
             pos_dict["target_pos"] = all_vertices[2:3]
@@ -252,39 +292,55 @@ class GarmentBuilder:
         self.vertex_builder = VertexBuilder(mcfg)
         self.noise_maker = NoiseMaker(mcfg)
 
-    def make_cloth_verts(self, body_pose: np.ndarray, global_orient: np.ndarray, transl: np.ndarray, betas: np.ndarray,
-                         garment_name: str) -> np.ndarray:
+
+    
+    def make_cloth_verts(self, sequence_dict, garment_name: str) -> np.ndarray:
         """
-        Make vertices of a garment `garment_name` in a given pose
+        Create body vertices from SMPL parameters (used in VertexBuilder.add_verts)
 
         :param body_pose: SMPL pose parameters [Nx69] OR [69]
         :param global_orient: SMPL global_orient [Nx3] OR [3]
         :param transl: SMPL translation [Nx3] OR [3]
         :param betas: SMPL betas [Nx10] OR [10]
-        :param garment_name: name of the garment in `self.garment_smpl_model_dict`
 
         :return: vertices [NxVx3]
         """
-        body_pose = torch.FloatTensor(body_pose)
-        global_orient = torch.FloatTensor(global_orient)
-        transl = torch.FloatTensor(transl)
-        betas = torch.FloatTensor(betas)
+        # body_pose = torch.FloatTensor(body_pose)
+        # global_orient = torch.FloatTensor(global_orient)
+        # transl = torch.FloatTensor(transl)
+        # betas = torch.FloatTensor(betas)
 
-        garment_smpl_model = self.garment_smpl_model_dict[garment_name]
+        sequence_dict = {k:torch.FloatTensor(v) for k,v in sequence_dict.items()}
 
-        if len(body_pose.shape) == 1:
-            body_pose = body_pose.unsqueeze(0)
-            global_orient = global_orient.unsqueeze(0)
-            transl = transl.unsqueeze(0)
+        if len(sequence_dict['body_pose'].shape) == 1:
+            for k in ['global_orient', 'body_pose', 'transl', 
+            'left_hand_pose', 'right_hand_pose', 
+            'jaw_pose', 'leye_pose', 'reye_pose']: 
+                if k in sequence_dict:
+                    sequence_dict[k] = sequence_dict[k].unsqueeze(0)
+        wholeseq = self.mcfg.wholeseq or sequence_dict['body_pose'].shape[0] > 1
+
+
+
+        betas = sequence_dict['betas']
         if len(betas.shape) == 1:
             betas = betas.unsqueeze(0)
 
-        wholeseq = self.mcfg.wholeseq or body_pose.shape[0] > 1
-        full_pose = torch.cat([global_orient, body_pose], dim=1)
+        global_orient = sequence_dict['global_orient']
+        body_pose = sequence_dict['body_pose']
+        transl = sequence_dict['transl']
+        full_pose = []
+        for k in ['global_orient', 'body_pose', 
+        'left_hand_pose', 'right_hand_pose', 
+        'jaw_pose', 'leye_pose', 'reye_pose']: 
+            if k in sequence_dict:
+                full_pose.append(sequence_dict[k])
 
-        if wholeseq and betas.shape[0] == 1:
-            betas = betas.repeat(body_pose.shape[0], 1)
+        full_pose = torch.cat(full_pose, dim=1)
 
+
+
+        garment_smpl_model = self.garment_smpl_model_dict[garment_name]
         with torch.no_grad():
             vertices = garment_smpl_model.make_vertices(betas=betas, full_pose=full_pose, transl=transl).numpy()
 
@@ -292,6 +348,47 @@ class GarmentBuilder:
             vertices = vertices[0]
 
         return vertices
+
+    # def make_cloth_verts(self, body_pose: np.ndarray, global_orient: np.ndarray, transl: np.ndarray, betas: np.ndarray,
+    #                      garment_name: str) -> np.ndarray:
+    #     """
+    #     Make vertices of a garment `garment_name` in a given pose
+
+    #     :param body_pose: SMPL pose parameters [Nx69] OR [69]
+    #     :param global_orient: SMPL global_orient [Nx3] OR [3]
+    #     :param transl: SMPL translation [Nx3] OR [3]
+    #     :param betas: SMPL betas [Nx10] OR [10]
+    #     :param garment_name: name of the garment in `self.garment_smpl_model_dict`
+
+    #     :return: vertices [NxVx3]
+    #     """
+    #     body_pose = torch.FloatTensor(body_pose)
+    #     global_orient = torch.FloatTensor(global_orient)
+    #     transl = torch.FloatTensor(transl)
+    #     betas = torch.FloatTensor(betas)
+
+    #     garment_smpl_model = self.garment_smpl_model_dict[garment_name]
+
+    #     if len(body_pose.shape) == 1:
+    #         body_pose = body_pose.unsqueeze(0)
+    #         global_orient = global_orient.unsqueeze(0)
+    #         transl = transl.unsqueeze(0)
+    #     if len(betas.shape) == 1:
+    #         betas = betas.unsqueeze(0)
+
+    #     wholeseq = self.mcfg.wholeseq or body_pose.shape[0] > 1
+    #     full_pose = torch.cat([global_orient, body_pose], dim=1)
+
+    #     if wholeseq and betas.shape[0] == 1:
+    #         betas = betas.repeat(body_pose.shape[0], 1)
+
+    #     with torch.no_grad():
+    #         vertices = garment_smpl_model.make_vertices(betas=betas, full_pose=full_pose, transl=transl).numpy()
+
+    #     if not wholeseq:
+    #         vertices = vertices[0]
+
+    #     return vertices
 
     def add_vertex_type(self, sample: HeteroData, garment_name: str) -> HeteroData:
         """
@@ -556,8 +653,7 @@ class BodyBuilder:
         self.mcfg = mcfg
         self.vertex_builder = VertexBuilder(mcfg)
 
-    def make_smpl_vertices(self, body_pose: np.ndarray, global_orient: np.ndarray, transl: np.ndarray,
-                           betas: np.ndarray, **kwargs) -> np.ndarray:
+    def make_smpl_vertices(self, sequence_dict, **kwargs) -> np.ndarray:
         """
         Create body vertices from SMPL parameters (used in VertexBuilder.add_verts)
 
@@ -568,20 +664,27 @@ class BodyBuilder:
 
         :return: vertices [NxVx3]
         """
-        body_pose = torch.FloatTensor(body_pose)
-        global_orient = torch.FloatTensor(global_orient)
-        transl = torch.FloatTensor(transl)
-        betas = torch.FloatTensor(betas)
-        if len(body_pose.shape) == 1:
-            body_pose = body_pose.unsqueeze(0)
-            global_orient = global_orient.unsqueeze(0)
-            transl = transl.unsqueeze(0)
-        if len(betas.shape) == 1:
-            betas = betas.unsqueeze(0)
-        wholeseq = self.mcfg.wholeseq or body_pose.shape[0] > 1
+
+        sequence_dict = {k:torch.FloatTensor(v) for k,v in sequence_dict.items()}
+
+        if len(sequence_dict['body_pose'].shape) == 1:
+            for k in ['global_orient', 'body_pose', 'transl', 
+            'left_hand_pose', 'right_hand_pose', 
+            'jaw_pose', 'leye_pose', 'reye_pose']: 
+                if k in sequence_dict:
+                    sequence_dict[k] = sequence_dict[k].unsqueeze(0)
+
+        for k in ['betas', 'expression']:
+            if k in sequence_dict:
+                v = sequence_dict[k]
+                if len(v.shape) == 1:
+                    v = v.unsqueeze(0)
+                sequence_dict[k] = v
+
+        wholeseq = self.mcfg.wholeseq or sequence_dict['body_pose'].shape[0] > 1
 
         with torch.no_grad():
-            smpl_output = self.smpl_model(betas=betas, body_pose=body_pose, transl=transl, global_orient=global_orient)
+            smpl_output = self.smpl_model(**sequence_dict)
         vertices = smpl_output.vertices.numpy().astype(np.float32)
 
         if not wholeseq:
@@ -649,71 +752,6 @@ class BodyBuilder:
         return sample
 
 
-class SequenceLoader:
-    def __init__(self, mcfg, data_path, betas_table=None):
-        self.mcfg = mcfg
-        self.data_path = data_path
-        self.betas_table = betas_table
-
-    def process_sequence(self, sequence: dict) -> dict:
-        """
-        Apply transformations to the SMPL sequence
-        :param sequence: dict with SMPL parameters
-        :return: processed dict with SMPL parameters
-        """
-        #
-        # from SNUG, eliminates hand-body penetrations
-        if self.mcfg.separate_arms:
-            body_pose = sequence['body_pose']
-            global_orient = sequence['global_orient']
-            full_pos = np.concatenate([global_orient, body_pose], axis=1)
-            full_pos = separate_arms(full_pos)
-            sequence['global_orient'] = full_pos[:, :3]
-            sequence['body_pose'] = full_pos[:, 3:]
-
-        # sample random SMPLX beta parameters
-        if self.mcfg.random_betas:
-            betas = sequence['betas']
-            random_betas = np.random.rand(*betas.shape)
-            random_betas = random_betas * self.mcfg.betas_scale * 2
-            random_betas -= self.mcfg.betas_scale
-            sequence['betas'] = random_betas
-
-        # zero-out hand pose (eliminates unrealistic hand poses)
-        sequence['body_pose'][:, -6:] *= 0
-
-        # zero-out all SMPL beta parameters
-        if self.mcfg.zero_betas:
-            sequence['betas'] *= 0
-
-        return sequence
-
-    def load_sequence(self, fname: str, betas_id: int=None) -> dict:
-        """
-        Load sequence of SMPL parameters from disc
-        and process it
-
-        :param fname: file name of the sequence
-        :param betas_id: index of the beta parameters in self.betas_table
-                        (used only in validation to generate sequences for metrics calculation
-        :return: dict with SMPL parameters:
-            sequence['body_pose'] np.array [Nx69]
-            sequence['global_orient'] np.array [Nx3]
-            sequence['transl'] np.array [Nx3]
-            sequence['betas'] np.array [10]
-        """
-        filepath = os.path.join(self.data_path, fname + '.pkl')
-        with open(filepath, 'rb') as f:
-            sequence = pickle.load(f)
-
-        assert betas_id is None or self.betas_table is not None, "betas_id should be specified only in validation mode with valid betas_table"
-
-        if self.betas_table is not None:
-            sequence['betas'] = self.betas_table[betas_id]
-
-        sequence = self.process_sequence(sequence)
-
-        return sequence
 
 
 class Loader:
@@ -723,6 +761,10 @@ class Loader:
 
     def __init__(self, mcfg: Config, garments_dict: dict, smpl_model: SMPL,
                  garment_smpl_model_dict: Dict[str, GarmentSMPL], obstacle_dict: dict, betas_table=None):
+        
+        sequence_loader_module = importlib.import_module(f'datasets.sequence_loaders.{mcfg.sequence_loader}')
+        SequenceLoader = sequence_loader_module.SequenceLoader
+
         self.sequence_loader = SequenceLoader(mcfg, mcfg.data_root, betas_table=betas_table)
         self.garment_builder = GarmentBuilder(mcfg, garments_dict, garment_smpl_model_dict)
         self.body_builder = BodyBuilder(mcfg, smpl_model, obstacle_dict)
@@ -740,8 +782,8 @@ class Loader:
         """
         sequence = self.sequence_loader.load_sequence(fname, betas_id=betas_id)
         sample = HeteroData()
-        sample = self.garment_builder.build(sample, sequence, idx, garment_name)
         sample = self.body_builder.build(sample, sequence, idx)
+        sample = self.garment_builder.build(sample, sequence, idx, garment_name)
         return sample
 
 

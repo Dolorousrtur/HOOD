@@ -23,7 +23,7 @@ dataloader:
   dataset:
     postcvpr:
       data_root: 'aux_data/validation_sequences/pose_sequences'
-      smpl_model: 'smpl/SMPL_FEMALE.pkl'
+      smpl_model: 'body_models/smpl/SMPL_FEMALE.pkl'
       garment_dict_file: 'garments_dict.pkl'
       obstacle_dict_file: 'smpl_aux.pkl'
       split_path: 'datasplits/comparison_new_seqs.csv'

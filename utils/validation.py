@@ -164,7 +164,7 @@ def create_one_sequence_dataloader(sequence_path: str, garment_name: str, garmen
     create_dataset = dataset_module.create
 
     data_root, file_name = os.path.split(sequence_path)
-    file_name, ext = os.path.splitext(file_name)
+    file_name, _ = os.path.splitext(file_name)
 
     dataset_config_dict['data_root'] = data_root
     dataset_config_dict['single_sequence_file'] = file_name

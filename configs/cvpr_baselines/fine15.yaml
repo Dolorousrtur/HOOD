@@ -38,7 +38,7 @@ dataloader:
     cvpr:
       data_root: 'vto_dataset/smpl_parameters'
       split_path: 'datasplits/train.csv'
-      smpl_model: 'smpl/SMPL_FEMALE.pkl'
+      smpl_model: 'body_models/smpl/SMPL_FEMALE.pkl'
       garment_dict_file: 'garments_dict.pkl'
       obstacle_dict_file: 'smpl_aux.pkl'
       lookup_steps: 5
