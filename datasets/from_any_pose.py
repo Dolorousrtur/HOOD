@@ -39,7 +39,7 @@ class Config:
 
     wholeseq: bool = True  
     fps: int = 30 
-    
+
 def make_obstacle_dict(mcfg: Config) -> dict:
     if mcfg.obstacle_dict_file is None:
         return {}
@@ -695,47 +695,14 @@ class BareMeshBodyBuilder:
         sample = self.add_vertex_level(sample)
         return sample
 
-class SequenceLoader:
+class MeshSequenceLoader:
     def __init__(self, mcfg):
         self.mcfg = mcfg
 
-    def process_sequence(self, sequence: dict) -> dict:
-        """
-        Apply transformations to the SMPL sequence
-        :param sequence: dict with SMPL parameters
-        :return: processed dict with SMPL parameters
-        """
-        # from SNUG, eliminates hand-body penetrations
-        if self.mcfg.separate_arms:
-            body_pose = sequence['body_pose']
-            global_orient = sequence['global_orient']
-            full_pos = np.concatenate([global_orient, body_pose], axis=1)
-            full_pos = separate_arms(full_pos)
-            sequence['global_orient'] = full_pos[:, :3]
-            sequence['body_pose'] = full_pos[:, 3:]
-
-        # zero-out hand pose (eliminates unrealistic hand poses)
-        sequence['body_pose'][:, -6:] *= 0
-
-        return sequence
-
     def load_sequence(self, fname: str) -> dict:
-        """
-        Load sequence of SMPL parameters from disc
-        and process it
 
-        :param fname: file name of the sequence
-        :return: dict with SMPL parameters:
-            sequence['body_pose'] np.array [Nx69]
-            sequence['global_orient'] np.array [Nx3]
-            sequence['transl'] np.array [Nx3]
-            sequence['betas'] np.array [10]
-        """
         with open(fname, 'rb') as f:
             sequence = pickle.load(f)
-
-        if self.mcfg.pose_sequence_type == 'body_model':
-            sequence = self.process_sequence(sequence)
 
         return sequence
 
@@ -746,16 +713,20 @@ class Loader:
     """
 
     def __init__(self, mcfg: Config, garment_dict: dict, obstacle_dict: dict, smpl_model: SMPL = None):
-        sequence_loader_module = importlib.import_module(f'datasets.sequence_loaders.{mcfg.sequence_loader}')
-        SequenceLoader = sequence_loader_module.SequenceLoader
 
-        self.sequence_loader = SequenceLoader(mcfg, '')
+
+
+
         self.garment_builder = GarmentBuilder(mcfg, garment_dict)
 
         if mcfg.pose_sequence_type == 'body_model':
             self.body_builder = SMPLBodyBuilder(mcfg, smpl_model, obstacle_dict)
+            sequence_loader_module = importlib.import_module(f'datasets.sequence_loaders.{mcfg.sequence_loader}')
+            SequenceLoader = sequence_loader_module.SequenceLoader
+            self.sequence_loader = SequenceLoader(mcfg, '')
         elif mcfg.pose_sequence_type == 'mesh':
             self.body_builder = BareMeshBodyBuilder(mcfg, obstacle_dict)
+            self.sequence_loader = MeshSequenceLoader(mcfg)
         else:
             raise ValueError(f'Unknown pose sequence type {mcfg.pose_sequence_type}. Should be "body_model" or "mesh"')
 
