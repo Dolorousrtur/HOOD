@@ -128,25 +128,7 @@ def load_runner_from_checkpoint(checkpoint_path: str, modules: dict, experiment_
 
 
 
-def create_one_sequence_dataloader_old(sequence_path: str, garment_name: str, modules: dict,
-                                   experiment_config: DictConfig) -> DataLoader:
-    """
-    Create a dataloader for a single pose sequence and a given garment
-    :param sequence_path: path to the SMPL pose sequence
-    :param garment_name: garment to load
-    :param modules: dictionary  of .py modules (from utils.arguments.load_params())
-    :param experiment_config: OmegaConf config for the experiment
-    :return:
-    """
-    experiment_config = update_config_single_sequence(experiment_config, sequence_path, garment_name)
-
-    dataloader_m = create_dataloader_module(modules, experiment_config)
-    dataloader = dataloader_m.create_dataloader(is_eval=True)
-    return dataloader
-
-
-def create_one_sequence_dataloader(sequence_path: str, garment_name: str, garment_dict_file: str, 
-                                   use_config=None, dataset_name=None, **kwargs) -> DataLoader:
+def create_one_sequence_dataloader(use_config=None, dataset_name=None, **kwargs) -> DataLoader:
 
 
     if use_config is not None:
@@ -163,23 +145,52 @@ def create_one_sequence_dataloader(sequence_path: str, garment_name: str, garmen
     DatasetConfig = dataset_module.Config
     create_dataset = dataset_module.create
 
+    dataset_config_dict.update(kwargs)
+    config = DatasetConfig(**dataset_config_dict)
+
+    dataset = create_dataset(config)
+    dataloader_config = DataloaderConfig(num_workers=0)
+    dataloader = DataloaderModule(dataset, dataloader_config).create_dataloader()
+    return dataloader
+
+def create_postcvpr_one_sequence_dataloader(sequence_path: str, garment_name: str, garment_dict_file: str, **kwargs) -> DataLoader:
     data_root, file_name = os.path.split(sequence_path)
     file_name, _ = os.path.splitext(file_name)
 
-    dataset_config_dict['data_root'] = data_root
-    dataset_config_dict['single_sequence_file'] = file_name
-    dataset_config_dict['single_sequence_garment'] = garment_name
-    dataset_config_dict['garment_dict_file'] = garment_dict_file
-    dataset_config_dict.update(kwargs)
+
+    dataloader = create_one_sequence_dataloader(use_config='postcvpr', data_root=data_root, single_sequence_file=file_name,
+                                                single_sequence_garment=garment_name, garment_dict_file=garment_dict_file,
+                                                **kwargs)
+    
+    return dataloader
 
 
-    config = DatasetConfig(**dataset_config_dict)
+def create_fromanypose_dataloader(pose_sequence_type, pose_sequence_path, garment_template_path, **kwargs) -> DataLoader:
+    dataloader = create_one_sequence_dataloader(dataset_name='from_any_pose', pose_sequence_type=pose_sequence_type,
+                                                pose_sequence_path=pose_sequence_path, garment_template_path=garment_template_path,
+                                                **kwargs)
+    
+    return dataloader
+    
+
+
+def make_fromanypose_dataloader(pose_sequence_type, pose_sequence_path, garment_template_path, smpl_model=None):
+    from datasets.from_any_pose import Config as DatasetConfig
+    from datasets.from_any_pose import create as create_dataset
+    from utils.dataloader import DataloaderModule
+    from utils.arguments import DataConfig as DataloaderConfig
+
+    config = DatasetConfig(pose_sequence_type=pose_sequence_type, 
+                        pose_sequence_path=pose_sequence_path, 
+                        garment_template_path=garment_template_path, 
+                        smpl_model=smpl_model)
 
 
     dataset = create_dataset(config)
     dataloader_config = DataloaderConfig(num_workers=0)
     dataloader = DataloaderModule(dataset, dataloader_config).create_dataloader()
     return dataloader
+
 
 
 def replace_model(modules: dict, current_config: DictConfig, model_config_name: str, config_dir: str=None):

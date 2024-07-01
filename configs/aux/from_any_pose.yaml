@@ -20,7 +20,7 @@ dataloader:
   pyg_data: True
   dataset:
     from_any_pose:
-      smpl_model: 'smpl/SMPL_FEMALE.pkl'
+      smpl_model: 'body_models/smpl/SMPL_FEMALE.pkl'
       pose_sequence_type: "smpl"
       pose_sequence_path: 'fromanypose/pose_sequence.pkl'
       # pose_sequence_type: "mesh"

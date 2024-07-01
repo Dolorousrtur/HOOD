@@ -32,7 +32,7 @@ class SequenceLoader:
             sequence['body_pose'] = full_pos[:, 3:]
 
         # sample random SMPL beta parameters
-        if self.mcfg.random_betas:
+        if hasattr(self.mcfg, 'random_betas') and self.mcfg.random_betas:
             betas = sequence['betas']
             random_betas = np.random.rand(*betas.shape)
             random_betas = random_betas * self.mcfg.betas_scale * 2
@@ -43,7 +43,7 @@ class SequenceLoader:
         sequence['body_pose'][:, -6:] *= 0
 
         # zero-out all SMPL beta parameters
-        if self.mcfg.zero_betas:
+        if hasattr(self.mcfg, 'zero_betas') and self.mcfg.zero_betas:
             sequence['betas'] *= 0
 
         return sequence
@@ -62,7 +62,10 @@ class SequenceLoader:
             sequence['transl'] np.array [Nx3]
             sequence['betas'] np.array [10]
         """
-        filepath = os.path.join(self.data_path, fname + '.pkl')
+        filepath = os.path.join(self.data_path, fname)
+        if not filepath.endswith('.pkl'):
+            filepath += '.pkl'
+
         with open(filepath, 'rb') as f:
             sequence = pickle.load(f)
 
@@ -74,3 +77,4 @@ class SequenceLoader:
         sequence = self.process_sequence(sequence)
 
         return sequence
+    

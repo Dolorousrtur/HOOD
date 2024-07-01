@@ -218,14 +218,8 @@ class GarmentCreator:
             garment_posedirs = garment_posedirs / n_samples
             garment_lbs_weights = garment_lbs_weights / n_samples
 
-        # out_dict = dict(v=garment_template, f=garment_faces, uv=uvs, f_uv=faces_uv, shapedirs=garment_shapedirs,
-        #                 posedirs=garment_posedirs, lbs_weights=garment_lbs_weights)
-
         out_dict = dict(v=garment_template_verts, f=garment_faces, shapedirs=garment_shapedirs,
                         posedirs=garment_posedirs, lbs_weights=garment_lbs_weights)
-        
-        for k, v in out_dict.items():
-            print(k, v.shape)
 
         return out_dict
 
@@ -305,7 +299,7 @@ def make_restpos_dict(vertices_full, faces_full):
 def obj2template(obj_path, verbose=False):
 
     gc = GarmentCreator(None, None, None, None, collect_lbs=False, coarse=False, verbose=verbose)    
-    out_dict = gc.make_garment_dict(obj_path, None, coarse=True, training=False, verbose=verbose)
+    out_dict = gc.make_garment_dict(obj_path)
 
     return out_dict
 

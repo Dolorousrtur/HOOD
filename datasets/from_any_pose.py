@@ -1,3 +1,4 @@
+import importlib
 import os
 import pickle
 from dataclasses import dataclass, MISSING
@@ -13,21 +14,32 @@ from torch_geometric.data import HeteroData
 from utils.coarse import make_coarse_edges
 from utils.common import NodeType, triangles_to_edges, separate_arms, pickle_load
 from utils.defaults import DEFAULTS
-from utils.mesh_creation import add_coarse_edges, obj2template
+from utils.mesh_creation import GarmentCreator, obj2template
 import warnings
+
+from datasets.postcvpr import VertexBuilder
 
 @dataclass
 class Config:
     pose_sequence_path: str = MISSING  #  Path to the pose sequence relative to $HOOD_DATA. Can be either sequence of SMLP parameters of a sequence of meshes depending on the value of pose_sequence_type
     garment_template_path: str = MISSING  # Path to the garment template relative to $HOOD_DATA. Can  be either .obj file or preprocessed or .pkl file (see utils/mesh_creation::obj2template)
-    pose_sequence_type: str = "smpl"  # "smpl" | "mesh" if "smpl" the pose_sequence_path is a sequence of SMPL parameters, if "mesh" the pose_sequence_path is a sequence of meshes
-    smpl_model: Optional[str] = None  # Path to the SMPL model relative to $HOOD_DATA/aux_data/
+    pose_sequence_type: str = "body_model"  # "body_model" | "mesh" if "body_model" the pose_sequence_path is a sequence of SMPL parameters, if "mesh" the pose_sequence_path is a sequence of meshes
+
+
+
+    sequence_loader: str = 'hood_pkl'  # Name of the sequence loader to use 
+    body_model_root: str = 'body_models'  # Path to the directory containg body model files, should contain `smpl` and/or `smplx` sub-directories. Relative to $HOOD_DATA/aux_data/
+    model_type: str = 'smpl'  # Type of the body model ('smpl' or 'smplx')
+    gender: str = 'female' # Gender of the body model ('male' | 'female' | 'neutral')    
+
     obstacle_dict_file: Optional[str] = None  # Path to the file with auxiliary data for obstacles relative to $HOOD_DATA/aux_data/
     n_coarse_levels: int = 3  # Number of coarse levels with long-range edges
     separate_arms: bool = False  # Whether to separate the arms from the rest of the body (to avoid body self-intersections)
     pinned_verts: bool = True  # Whether to use pinned vertices
 
-
+    wholeseq: bool = True  
+    fps: int = 30 
+    
 def make_obstacle_dict(mcfg: Config) -> dict:
     if mcfg.obstacle_dict_file is None:
         return {}
@@ -54,15 +66,16 @@ def create_loader(mcfg: Config):
     else:
         raise ValueError(f'Unknown garment template format: {mcfg.garment_template_path}, has to be .obj or .pkl')
 
-    if mcfg.smpl_model is None:
-        smpl_model = None
+    if mcfg.pose_sequence_type == 'mesh':
+        body_model = None
+    elif mcfg.pose_sequence_type == 'body_model':
+        body_model_root = os.path.join(DEFAULTS.aux_data, mcfg.body_model_root)
+        body_model = smplx.create(body_model_root, model_type=mcfg.model_type, gender=mcfg.gender, use_pca=False)
     else:
-        smpl_model_path = os.path.join(DEFAULTS.aux_data, mcfg.smpl_model)
-        smpl_model = smplx.SMPL(smpl_model_path)
+        raise ValueError(f'Unknown pose sequence type: {mcfg.pose_sequence_type}, has to be "mesh" or "body_model"')
 
     obstacle_dict = make_obstacle_dict(mcfg)
-
-    loader = Loader(mcfg, garment_dict, obstacle_dict, smpl_model)
+    loader = Loader(mcfg, garment_dict, obstacle_dict, body_model)
     return loader
 
 
@@ -74,68 +87,68 @@ def create(mcfg: Config):
     return dataset
 
 
-class VertexBuilder:
-    """
-    Helper class to build garment and body vertices from a sequence of SMPL poses.
-    """
+# class VertexBuilder:
+#     """
+#     Helper class to build garment and body vertices from a sequence of SMPL poses.
+#     """
 
-    def __init__(self, mcfg):
-        self.mcfg = mcfg
+#     def __init__(self, mcfg):
+#         self.mcfg = mcfg
 
-    @staticmethod
-    def build(sequence_dict: dict, f_make, idx_start: int, idx_end: int = None, garment_name: str = None) -> np.ndarray:
-        """
-        Build vertices from a sequence of SMPL poses using the given `f_make` function.
-        :param sequence_dict: a dictionary of SMPL parameters
-        :param f_make: a function that takes SMPL parameters and returns vertices
-        :param idx_start: first frame index
-        :param idx_end: last frame index
-        :param garment_name: name of the garment (None for body)
-        :return: [Nx3] mesh vertices
-        """
-        for k in ['body_pose', 'global_orient', 'transl']:
-            sequence_dict[k] = sequence_dict[k][idx_start: idx_end]
+#     @staticmethod
+#     def build(sequence_dict: dict, f_make, idx_start: int, idx_end: int = None, garment_name: str = None) -> np.ndarray:
+#         """
+#         Build vertices from a sequence of SMPL poses using the given `f_make` function.
+#         :param sequence_dict: a dictionary of SMPL parameters
+#         :param f_make: a function that takes SMPL parameters and returns vertices
+#         :param idx_start: first frame index
+#         :param idx_end: last frame index
+#         :param garment_name: name of the garment (None for body)
+#         :return: [Nx3] mesh vertices
+#         """
+#         for k in ['body_pose', 'global_orient', 'transl']:
+#             sequence_dict[k] = sequence_dict[k][idx_start: idx_end]
 
-        N = sequence_dict['body_pose'].shape[0]
-        sequence_dict['betas'] = np.tile(sequence_dict['betas'], (N, 1))
+#         N = sequence_dict['body_pose'].shape[0]
+#         sequence_dict['betas'] = np.tile(sequence_dict['betas'], (N, 1))
 
-        verts = f_make(sequence_dict, garment_name=garment_name)
+#         verts = f_make(sequence_dict, garment_name=garment_name)
 
-        return verts
+#         return verts
 
-    def pos2tensor(self, pos: np.ndarray) -> torch.Tensor:
-        """
-        Convert a numpy array of vertices to a tensor and permute the axes into [VxNx3] (torch geometric format)
-        """
-        pos = torch.tensor(pos).permute(1, 0, 2)
-        return pos
+#     def pos2tensor(self, pos: np.ndarray) -> torch.Tensor:
+#         """
+#         Convert a numpy array of vertices to a tensor and permute the axes into [VxNx3] (torch geometric format)
+#         """
+#         pos = torch.tensor(pos).permute(1, 0, 2)
+#         return pos
 
-    def add_verts(self, sample: HeteroData, sequence_dict: dict, f_make, object_key: str,
-                  **kwargs) -> HeteroData:
-        """
-        Builds the vertices from the given SMPL pose sequence and adds them to the HeteroData sample.
-        :param sample: HetereoData object
-        :param sequence_dict: sequence of SMPL parameters
-        :param f_make: function that takes SMPL parameters and returns vertices
-        :param object_key: name of the object to build vertices for ('cloth' or 'obstacle')
-        :return: updated HeteroData object
-        """
+#     def add_verts(self, sample: HeteroData, sequence_dict: dict, f_make, object_key: str,
+#                   **kwargs) -> HeteroData:
+#         """
+#         Builds the vertices from the given SMPL pose sequence and adds them to the HeteroData sample.
+#         :param sample: HetereoData object
+#         :param sequence_dict: sequence of SMPL parameters
+#         :param f_make: function that takes SMPL parameters and returns vertices
+#         :param object_key: name of the object to build vertices for ('cloth' or 'obstacle')
+#         :return: updated HeteroData object
+#         """
 
-        pos_dict = {}
+#         pos_dict = {}
 
-        # Build the vertices for the whole sequence
-        all_vertices = VertexBuilder.build(sequence_dict, f_make, 0, None,
-                                           **kwargs)
-        pos_dict['prev_pos'] = all_vertices
-        pos_dict['pos'] = all_vertices
-        pos_dict['target_pos'] = all_vertices
+#         # Build the vertices for the whole sequence
+#         all_vertices = VertexBuilder.build(sequence_dict, f_make, 0, None,
+#                                            **kwargs)
+#         pos_dict['prev_pos'] = all_vertices
+#         pos_dict['pos'] = all_vertices
+#         pos_dict['target_pos'] = all_vertices
 
 
-        for k, v in pos_dict.items():
-            v = self.pos2tensor(v)
-            setattr(sample[object_key], k, v)
+#         for k, v in pos_dict.items():
+#             v = self.pos2tensor(v)
+#             setattr(sample[object_key], k, v)
 
-        return sample
+#         return sample
 
 
 
@@ -152,6 +165,8 @@ class GarmentBuilder:
         self.mcfg = mcfg
         self.garment_dict = garment_dict
         self.vertex_builder = VertexBuilder(mcfg)
+
+        self.gc = GarmentCreator(None, None, None, None, collect_lbs=False, coarse=True, verbose=False)    
 
     def add_verts(self, sample: HeteroData, garment_dict: dict) -> HeteroData:
 
@@ -258,7 +273,7 @@ class GarmentBuilder:
         # Randomly choose center of the mesh
         # center of a graph is a node with minimal eccentricity (distance to the farthest node)
         if 'center' not in garment_dict:
-            garment_dict = add_coarse_edges(garment_dict, self.mcfg.n_coarse_levels)
+            garment_dict = self.gc.add_coarse_edges(garment_dict, self.mcfg.n_coarse_levels)
 
         center_nodes = garment_dict['center']
         center = np.random.choice(center_nodes)
@@ -529,6 +544,7 @@ class SMPLBodyBuilder:
         self.mcfg = mcfg
         self.vertex_builder = VertexBuilder(mcfg)
 
+    
     def make_smpl_vertices(self, sequence_dict, **kwargs) -> np.ndarray:
         """
         Create body vertices from SMPL parameters (used in VertexBuilder.add_verts)
@@ -594,7 +610,7 @@ class SMPLBodyBuilder:
             sample['obstacle'].vertex_level torch.LongTensor [Vx1]: level of the vertex in the hierarchy (always 0 for the body)
 
         """
-        sample = self.vertex_builder.add_verts(sample, sequence_dict, self.make_smpl_vertices, "obstacle")
+        sample = self.vertex_builder.add_verts(sample, sequence_dict, 0,  self.make_smpl_vertices, "obstacle")
         sample = self.add_vertex_type(sample)
         sample = self.add_faces(sample)
         sample = self.add_vertex_level(sample)
@@ -718,7 +734,7 @@ class SequenceLoader:
         with open(fname, 'rb') as f:
             sequence = pickle.load(f)
 
-        if self.mcfg.pose_sequence_type == 'smpl':
+        if self.mcfg.pose_sequence_type == 'body_model':
             sequence = self.process_sequence(sequence)
 
         return sequence
@@ -730,15 +746,18 @@ class Loader:
     """
 
     def __init__(self, mcfg: Config, garment_dict: dict, obstacle_dict: dict, smpl_model: SMPL = None):
-        self.sequence_loader = SequenceLoader(mcfg)
+        sequence_loader_module = importlib.import_module(f'datasets.sequence_loaders.{mcfg.sequence_loader}')
+        SequenceLoader = sequence_loader_module.SequenceLoader
+
+        self.sequence_loader = SequenceLoader(mcfg, '')
         self.garment_builder = GarmentBuilder(mcfg, garment_dict)
 
-        if mcfg.pose_sequence_type == 'smpl':
+        if mcfg.pose_sequence_type == 'body_model':
             self.body_builder = SMPLBodyBuilder(mcfg, smpl_model, obstacle_dict)
         elif mcfg.pose_sequence_type == 'mesh':
             self.body_builder = BareMeshBodyBuilder(mcfg, obstacle_dict)
         else:
-            raise ValueError(f'Unknown pose sequence type {mcfg.pose_sequence_type}. Should be "smpl" or "mesh"')
+            raise ValueError(f'Unknown pose sequence type {mcfg.pose_sequence_type}. Should be "body_model" or "mesh"')
 
 
     def load_sample(self, fname: str) -> HeteroData:
