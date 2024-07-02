@@ -162,4 +162,5 @@ cython_debug/
 #
 Debug.ipynb
 *_local.ipynb
+*_bu.ipynb
 

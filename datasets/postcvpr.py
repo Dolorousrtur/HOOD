@@ -69,6 +69,14 @@ def create_loader(mcfg: Config):
     garments_dict = load_garments_dict(garment_dict_path)
 
     body_model_root = os.path.join(DEFAULTS.aux_data, mcfg.body_model_root)
+
+    if mcfg.sequence_loader == 'hood_pkl':
+        mcfg.model_type = 'smpl'
+    elif mcfg.sequence_loader == 'cmu_npz_smpl':
+        mcfg.model_type = 'smpl'
+    elif mcfg.sequence_loader == 'cmu_npz_smplx':
+        mcfg.model_type = 'smplx'
+
     body_model = smplx.create(body_model_root, model_type=mcfg.model_type, gender=mcfg.gender, use_pca=False)
 
     garment_smpl_model_dict = make_garment_smpl_dict(garments_dict, body_model)

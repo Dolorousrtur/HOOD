@@ -65,7 +65,7 @@ class Config:
     rollouts_dir: str = 'validation_sequences/my_hood_rollouts'
     obstacle_dict_file: str = 'smpl_aux.pkl'
     garment_dict_file: str = 'garments_dict.pkl'
-    smpl_model: str = 'smpl/SMPL_FEMALE.pkl'
+    smpl_model: str = 'body_models/smpl/SMPL_FEMALE.pkl'
 
     density: Optional[float] = 0.20022
     lame_mu: Optional[float] = 23600.0

@@ -714,9 +714,6 @@ class Loader:
 
     def __init__(self, mcfg: Config, garment_dict: dict, obstacle_dict: dict, smpl_model: SMPL = None):
 
-
-
-
         self.garment_builder = GarmentBuilder(mcfg, garment_dict)
 
         if mcfg.pose_sequence_type == 'body_model':

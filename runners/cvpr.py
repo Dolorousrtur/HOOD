@@ -118,8 +118,7 @@ class Runner(nn.Module):
 
         return trajectories_dicts
 
-    def _rollout(self, sequence, start_idx, n_steps, progressbar=False, bare=False) -> (
-            list, list, list, dict):
+    def _rollout(self, sequence, start_idx, n_steps, progressbar=False, bare=False) -> (list, list, list, dict):
         trajectory = []
         gt_trajectory = []
         obstacle_trajectory = []
@@ -138,10 +137,9 @@ class Runner(nn.Module):
                 state = self._remove_collisions(state)
             with torch.no_grad():
                 state = self.model(state, is_training=False)
-            next_pos = state['cloth'].pred_pos
-            trajectory.append(next_pos)
+            trajectory.append(state['cloth'].pred_pos)
             gt_trajectory.append(state['cloth'].target_pos)
-            obstacle_trajectory.append(state['obstacle'].pos)
+            obstacle_trajectory.append(state['obstacle'].target_pos)
 
             if not bare:
                 state.cloth_obj = sequence['cloth'].cloth_obj
