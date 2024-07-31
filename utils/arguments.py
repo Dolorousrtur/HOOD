@@ -19,6 +19,10 @@ class ExperimentConfig:
     checkpoint_path: Optional[str] = None   # path to checkpoint to load
     max_iter: Optional[int] = None          # max number of iterations
 
+    enable_repulsions: bool = False
+    enable_attractions: bool = False
+    enable_attractions_from: Optional[int] = None
+    
 
 @dataclass
 class DataConfig:

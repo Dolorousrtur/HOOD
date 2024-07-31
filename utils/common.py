@@ -1,13 +1,15 @@
+from copy import deepcopy
 import enum
 import math
 import os
-import pickle
 import random
 
 import einops
 import numpy as np
 import torch
 from omegaconf import OmegaConf
+from pytorch3d.structures import Pointclouds, packed_to_list
+from scipy.spatial.transform import Rotation as R
 
 
 class NodeType(enum.IntEnum):
@@ -18,11 +20,18 @@ class NodeType(enum.IntEnum):
     SIZE = 9
 
 
+# TODO: add CCraft edge types ???
 class EdgeType(enum.IntEnum):
     NORMAL = 0
     BUTTON = 1
     LONG_RANGE = 2
     SIZE = 3
+
+
+class EdgeTypeCC(enum.IntEnum):
+    NORMAL = 0
+    FUTUREPINNED = 1
+    SIZE = 2
 
 
 def move2device(data, device):
@@ -70,7 +79,7 @@ def set_manual_seed(seed: int):
     random.seed(seed)
 
 
-def triangles_to_edges(faces: torch.LongTensor, links: torch.LongTensor = None):
+def triangles_to_edges(faces: torch.LongTensor, links: torch.LongTensor = None, two_way=True):
     """Computes mesh edges from triangles."""
 
     # collect edges from triangles
@@ -93,17 +102,24 @@ def triangles_to_edges(faces: torch.LongTensor, links: torch.LongTensor = None):
     packed_edges = torch.stack([senders, receivers], dim=-1)
     unique_edges = torch.unique(packed_edges, dim=1)
 
-    sortvals = unique_edges[..., 0] * 10000 + unique_edges[..., 1]
-    sort_idx = torch.sort(sortvals, dim=1).indices[0]
+    id_offset = torch.max(unique_edges) + 1
+
+    sortvals = unique_edges[..., 0] * id_offset + unique_edges[..., 1]
+    sort_idx = torch.sort(sortvals, dim=-1).indices[0]
     unique_edges = unique_edges[:, sort_idx]
     senders, receivers = torch.unbind(unique_edges, dim=-1)
 
-    # create two-way connectivity
-    all_senders = torch.cat([senders, receivers], dim=1)
-    all_receivers = torch.cat([receivers, senders], dim=1)
+    if two_way:
+        # create two-way connectivity
+        all_senders = torch.cat([senders, receivers], dim=1)
+        all_receivers = torch.cat([receivers, senders], dim=1)
+    else:
+        all_senders = senders
+        all_receivers = receivers
 
-    edges = torch.cat([all_senders, all_receivers], dim=0)
+    edges = torch.cat([all_receivers, all_senders], dim=0)
     return edges
+
 
 
 def make_einops_str(ndims, insert_k=None):
@@ -190,28 +206,19 @@ def make_pervertex_tensor_from_lens(lens, val_tensor):
     return val_stack
 
 
-def add_field_to_pyg_batch(batch, new_key: str, value: torch.Tensor, node_key: str, reference_key: str = None,
-                           one_per_sample: bool = False, zero_inc: bool = False):
-    """
-    Add a new field to a pytorch geometric Batch object.
-
-    Updates the batch[node_key]._mapping dictionary to include the new field.
-    Updates the batch._slice_dict[node_key] dictionary to include slice indices for the new field.
-    Updates the batch._inc_dict[node_key] dictionary to include the increment values for the new field.
-
-    :param batch: Batch object
-    :param new_key: a key for the new field
-    :param value: a tensor to add
-    :param node_key: a key for the node field to which the new field will be added (e.g. `cloth` or `obstacle`)
-    :param reference_key: a field to use as a reference for the size of the new field
-    :param one_per_sample: if True and reference_key is None, the new field will have only one value per sample in the batch
-    :param zero_inc: if True, the increment values for the new field will be set to zero
-    :return: updated Batch object
-    """
+def add_field_to_pyg_batch(batch, new_key, value, node_key, reference_key=None, one_per_sample=False, zero_inc=False, new_dim=False):
     batch[node_key]._mapping[new_key] = value
     B = batch.num_graphs
 
-    if reference_key is None:
+    if new_dim:
+        device = value.device
+        N = value.shape[0]
+        slice = torch.LongTensor([0, N])
+        inc = torch.zeros(B).long().to(device)
+
+        batch._slice_dict[node_key][new_key] = slice
+        batch._inc_dict[node_key][new_key] = inc
+    elif reference_key is None:
         if one_per_sample:
             device = value.device
             slice = torch.arange(B + 1).to(device)
@@ -329,10 +336,6 @@ def relative_between_log(fr, to, value: torch.Tensor):
 
     return value_norm
 
-
-from scipy.spatial.transform import Rotation as R
-
-
 def separate_arms(poses: np.ndarray, angle=20, left_arm=17, right_arm=16):
     """
     Modify the SMPL poses to avoid self-intersections of the arms and the body.
@@ -358,21 +361,68 @@ def separate_arms(poses: np.ndarray, angle=20, left_arm=17, right_arm=16):
     return poses.reshape((poses.shape[0], -1))
 
 
-def pickle_load(file):
-    """
-    Load a pickle file.
-    """
-    with open(file, 'rb') as f:
-        loadout = pickle.load(f)
+def create_zero_pointclouds(pc_list):
+    zero_list = []
 
-    return loadout
+    for pc in pc_list:
+        zshape = list(pc.shape)
+        zshape[-1] = 3
+        zero_tensor = torch.zeros(*zshape).to(pc.device)
+        zero_list.append(zero_tensor)
+
+        # print(pc.shape)
+
+    pointclouds = Pointclouds(zero_list, features=pc_list)
+    return pointclouds
+
+def pcd_replace_features_packed(pcd, features_packed):
+    npppc = pcd.num_points_per_cloud().detach().cpu().numpy().tolist()
+    features_list = list(packed_to_list(features_packed, npppc))
+    updated_pcd = create_zero_pointclouds(features_list)
+    return updated_pcd
 
 
-def pickle_dump(loadout, file):
-    """
-    Dump a pickle file. Create the directory if it does not exist.
-    """
-    os.makedirs(os.path.dirname(str(file)), exist_ok=True)
+def copy_pyg_batch(batch):
+    batch_copy = batch.detach().clone()
+    batch_copy['cloth']._mapping = deepcopy(batch_copy['cloth']._mapping)
+    batch_copy._slice_dict = deepcopy(batch_copy._slice_dict)
+    batch_copy._inc_dict = deepcopy(batch_copy._inc_dict)
+    return batch_copy
 
-    with open(file, 'wb') as f:
-        pickle.dump(loadout, f)
+class TorchTimer(object):
+
+    def __init__(self, time_dict, label, start=None, end=None, to_print=False):
+        if start is None:
+            start = torch.cuda.Event(enable_timing=True)
+        if end is None:
+            end = torch.cuda.Event(enable_timing=True)
+
+        self.time_dict = time_dict
+        self.label = label
+        self.to_print = to_print
+        self.start = start
+        self.end = end
+
+        # self.args = args
+
+    def __enter__(self):
+        self.start.record()
+        return self
+
+    def __call__(self, *args):
+        return self
+
+    # def __exit__(self, _type=None, value=None, traceback=None):
+    def __exit__(self, *args):
+        self.end.record()
+        torch.cuda.synchronize()
+        t = self.start.elapsed_time(self.end)
+
+        if self.time_dict is not None:
+            if type(self.time_dict[self.label]) == list:
+                self.time_dict[self.label].append(t)
+            else:
+                self.time_dict[self.label] = t
+
+        if self.to_print:
+            print(f"{self.label}: {t:.2f} ms.")

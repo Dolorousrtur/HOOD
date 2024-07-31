@@ -14,7 +14,7 @@ from aitviewer.viewer import Viewer
 from matplotlib import pyplot as plt
 from omegaconf import MISSING, OmegaConf
 
-from utils.common import pickle_load
+from utils.io import pickle_load
 
 
 def place_meshes(cloth_pos: np.ndarray, obstacle_pos: np.ndarray, x_shift: float, y_shift: float):

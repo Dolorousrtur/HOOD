@@ -21,11 +21,14 @@ class GraphNetBlock(BaseBlock):
         super().__init__(edge_processor_dict, node_processor_dict)
 
     def get_updated_edge_features(self, sample):
+
         updated_features = {}
 
         for edgeset_key, edgeset in self.edge_sets.items():
-            edge_features_updated = self.update_edge_features(sample, edgeset['edge_key'], edgeset['source'],
-                                                              edgeset['edge_key'], edgeset['target'])
+            s, e, t = edgeset['source'], edgeset['edge_key'], edgeset['target']
+            if (s, e, t) not in sample.edge_types:
+                continue
+            edge_features_updated = self.update_edge_features(sample, e, s, e, t)
             updated_features[edgeset_key] = edge_features_updated
 
         return updated_features
@@ -34,6 +37,10 @@ class GraphNetBlock(BaseBlock):
         nodeset_input_features = defaultdict(dict)
 
         for edgeset_key, edgeset in self.edge_sets.items():
+            s, e, t = edgeset['source'], edgeset['edge_key'], edgeset['target']
+            if (s, e, t) not in sample.edge_types:
+                continue
+
             source_nodes = sample[edgeset['source']]
             target_nodes = sample[edgeset['target']]
 
@@ -51,6 +58,8 @@ class GraphNetBlock(BaseBlock):
 
     def get_updated_node_features(self, sample, nodeset_input_features):
         updated_node_features = dict()
+
+
         for node_key, features_dict in nodeset_input_features.items():
             nodes = sample[node_key]
 
@@ -82,10 +91,13 @@ class GraphNetBlock(BaseBlock):
 
     def update_edge_features_sample(self, sample, updated_edge_features):
         for edgeset_key, edgeset in self.edge_sets.items():
-            prev_features = sample[edgeset['source'], edgeset['edge_key'], edgeset['target']].features
+            s, e, t = edgeset['source'], edgeset['edge_key'], edgeset['target']
+            if (s, e, t) not in sample.edge_types:
+                continue
+            prev_features = sample[s, e, t].features
             update_features = updated_edge_features[edgeset_key]
 
-            sample[edgeset['source'], edgeset['edge_key'], edgeset['target']].features = prev_features + update_features
+            sample[s, e, t].features = prev_features + update_features
 
         return sample
 
@@ -208,17 +220,22 @@ class EncodeProcessDecode(nn.Module):
         self.n_nodefeatures = mcfg.n_nodefeatures
         self.n_edgefeatures_mesh = mcfg.n_edgefeatures_mesh
         self.n_edgefeatures_world = mcfg.n_edgefeatures_world
+        self.n_edgefeatures_body = mcfg.n_edgefeatures_body
         self.n_edgefeatures_coarse = mcfg.n_edgefeatures_coarse
         self._message_passing_steps = mcfg.message_passing_steps
         self._n_coarse_levels = mcfg.n_coarse_levels
         self.architecture_string = mcfg.architecture
+        self.selfcoll = mcfg.selfcoll
 
         self.node_encoder = self._make_mlp(self.n_nodefeatures, self._latent_size)
         self.decoder = self._make_mlp(self._latent_size, self._output_size, layer_norm=False)
 
         edgeset_encoders = {}
         edgeset_encoders['mesh'] = self._make_mlp(self.n_edgefeatures_mesh, self._latent_size)
-        edgeset_encoders['world'] = self._make_mlp(self.n_edgefeatures_world, self._latent_size)
+        if self.selfcoll:
+            edgeset_encoders['repulsion'] = self._make_mlp(self.n_edgefeatures_world, self._latent_size)
+            edgeset_encoders['attraction'] = self._make_mlp(self.n_edgefeatures_world, self._latent_size)
+        edgeset_encoders['body'] = self._make_mlp(self.n_edgefeatures_body, self._latent_size)
 
         self.edge_key_transform = dict(f='mesh')
         for i in range(self._n_coarse_levels):
@@ -229,20 +246,28 @@ class EncodeProcessDecode(nn.Module):
         self.edge_proc_model = functools.partial(self._make_mlp, input_size=self._latent_size * 3,
                                                  output_size=self._latent_size)
 
-        self.edge_sets_full = make_edgesets_dict(self._n_coarse_levels)
+        self.edge_sets_full = make_edgesets_dict(self._n_coarse_levels, new_body=True, selfcoll=self.selfcoll, separate_attraction_edges=True)
 
-        self.edge_sets_2filt = {k: self.edge_sets_full[k] for k in ['world_direct', 'world_inverse']}
+        edge_keys_2filt = ['body_direct', 'body_inverse']
+        if self.selfcoll:
+            edge_keys_2filt += ['repulsion', 'attraction']
+        self.edge_sets_2filt = {k: self.edge_sets_full[k] for k in ['body_direct', 'body_inverse']}
 
         self.build_model(self.architecture_string)
 
     def make_block(self, level_str):
         es_strs = level_str.split(',')
         n_edgesets = 1 + len(es_strs)
+        if self.selfcoll:
+            n_edgesets += 2
 
         node_proc_model = functools.partial(self._make_mlp, input_size=self._latent_size * (1 + n_edgesets),
                                             output_size=self._latent_size)
 
-        edgesets_list = ['world_direct', 'world_inverse'] + [self.edge_key_transform[es] for es in es_strs]
+        edgesets_list = ['body_direct', 'body_inverse']
+        if self.selfcoll:
+            edgesets_list += ['repulsion', 'attraction']
+        edgesets_list += [self.edge_key_transform[es] for es in es_strs]
         edgeset_dict = {k: self.edge_sets_full[k] for k in edgesets_list}
 
         block = GraphNetBlock(node_proc_model, self.edge_proc_model, edgeset_dict, self._latent_size)
@@ -269,6 +294,7 @@ class EncodeProcessDecode(nn.Module):
         level_changes = []
         levels = []
 
+        lstr_prev = None
         for i, lstr in enumerate(level_strs):
 
             if ':' in lstr:
@@ -296,6 +322,8 @@ class EncodeProcessDecode(nn.Module):
             block = self.make_block(lstr)
             levels[-1].append(block)
 
+            lstr_prev = lstr
+
         self.level_changes = nn.ModuleList(level_changes)
         levels = [nn.ModuleList(level) for level in levels]
         self.levels = nn.ModuleList(levels)
@@ -309,53 +337,68 @@ class EncodeProcessDecode(nn.Module):
         return network
 
     def _encode_nodes(self, sample):
+        is_obstacle = 'obstacle' in sample.node_types
+
         cloth_features = sample['cloth'].node_features
-        obstacle_features = sample['obstacle'].node_features
-        obstacle_active_mask = sample['obstacle'].active_mask[:, 0]
-        obstacle_features_active = obstacle_features[obstacle_active_mask]
-
         N_cloth = cloth_features.shape[0]
-        N_obstacle = obstacle_features.shape[0]
 
-        combined_features = torch.cat([cloth_features, obstacle_features_active], dim=0)
+        if is_obstacle:
+            obstacle_features = sample['obstacle'].node_features
+            obstacle_active_mask = sample['obstacle'].active_mask[:, 0]
+            obstacle_features_active = obstacle_features[obstacle_active_mask]
+
+            N_obstacle = obstacle_features.shape[0]
+
+            combined_features = torch.cat([cloth_features, obstacle_features_active], dim=0)
+        else:
+            combined_features = cloth_features
+
         combined_latents = self.node_encoder(combined_features)
 
         cloth_latents = combined_latents[:N_cloth]
-        obstacle_active_latents = combined_latents[N_cloth:]
-        latent_features = obstacle_active_latents.shape[1]
-
-        obstacle_latents = torch.zeros(N_obstacle, latent_features).to(obstacle_active_latents.device)
-        obstacle_latents[obstacle_active_mask] = obstacle_active_latents
-
         sample['cloth'].node_features = cloth_latents
-        sample['obstacle'].node_features = obstacle_latents
+
+        if is_obstacle:
+            obstacle_active_latents = combined_latents[N_cloth:]
+            latent_features = obstacle_active_latents.shape[1]
+
+            obstacle_latents = torch.zeros(N_obstacle, latent_features).to(obstacle_active_latents.device)
+            obstacle_latents[obstacle_active_mask] = obstacle_active_latents
+
+            sample['obstacle'].node_features = obstacle_latents
 
         return sample
 
     def _encode_edges(self, sample):
+        is_obstacle = 'obstacle' in sample.node_types
+
         mesh_edge_features = sample['cloth', 'mesh_edge', 'cloth'].features
-
-
-
         mesh_edge_latents = self.edgeset_encoders['mesh'](mesh_edge_features)
         sample['cloth', 'mesh_edge', 'cloth'].features = mesh_edge_latents
 
-        for i in range(3):
+        for i in range(self._n_coarse_levels):
             key = f'coarse_edge{i}'
             coarse_edge_features = sample['cloth', key, 'cloth'].features
             coarse_edge_latents = self.edgeset_encoders[f'coarse{i}'](coarse_edge_features)
             sample['cloth', key, 'cloth'].features = coarse_edge_latents
 
-        cloth_edge_features_direct = sample['cloth', 'world_edge', 'obstacle'].features
-        cloth_edge_features_inverse = sample['obstacle', 'world_edge', 'cloth'].features
-        N_world_edges = cloth_edge_features_direct.shape[0]
+        if is_obstacle:
+            cloth_edge_features_direct = sample['cloth', 'body_edge', 'obstacle'].features
+            cloth_edge_features_inverse = sample['obstacle', 'body_edge', 'cloth'].features
+            N_body_edges = cloth_edge_features_direct.shape[0]
 
-        cloth_edge_features_cat = torch.cat([cloth_edge_features_direct, cloth_edge_features_inverse], dim=0)
-        cloth_edge_latents_cat = self.edgeset_encoders['world'](cloth_edge_features_cat)
-        cloth_edge_latents_direct = cloth_edge_latents_cat[:N_world_edges]
-        cloth_edge_latents_inverse = cloth_edge_latents_cat[N_world_edges:]
-        sample['cloth', 'world_edge', 'obstacle'].features = cloth_edge_latents_direct
-        sample['obstacle', 'world_edge', 'cloth'].features = cloth_edge_latents_inverse
+            cloth_edge_features_cat = torch.cat([cloth_edge_features_direct, cloth_edge_features_inverse], dim=0)
+            cloth_edge_latents_cat = self.edgeset_encoders['body'](cloth_edge_features_cat)
+            cloth_edge_latents_direct = cloth_edge_latents_cat[:N_body_edges]
+            cloth_edge_latents_inverse = cloth_edge_latents_cat[N_body_edges:]
+            sample['cloth', 'body_edge', 'obstacle'].features = cloth_edge_latents_direct
+            sample['obstacle', 'body_edge', 'cloth'].features = cloth_edge_latents_inverse
+
+        if self.selfcoll:
+            for k in ['repulsion', 'attraction']:
+                features = sample['cloth', f'{k}_edge', 'cloth'].features
+                latents = self.edgeset_encoders[k](features)
+                sample['cloth', f'{k}_edge', 'cloth'].features = latents
         return sample
 
     def _encode(self, sample: Batch) -> Batch:

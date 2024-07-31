@@ -9,7 +9,8 @@ import torch
 from torch_geometric.data import Batch
 from tqdm import tqdm
 from utils.arguments import load_params, create_modules
-from utils.common import move2device, pickle_load
+from utils.common import move2device
+from utils.io import pickle_load
 
 
 def set_garment(sample, rest_pos, faces_batch_cloth, faces_batch_obstacle):

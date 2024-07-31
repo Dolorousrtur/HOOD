@@ -3,11 +3,26 @@ experiment:
   save_checkpoint_every: 2000
   n_epochs: 20000000
 
+
 runner:
-  postcvpr:
+  ccraft:
     warmup_steps: 100
+    n_opt_steps: 1
+    increase_roll_every: 5000
+    roll_max: 20
+    push_eps: 2e-3
+    initial_ts: 3.333333333333333e-1
+    regular_ts: 3.333333333333333e-2
+    use_restpos_for_strain_tensor: True
+    opposite_edges: False
+    grad_clip: 1.
+    random_pin_nobody: False
+    n_random_pin_nobody: 2
+    nocollect_after: 2
+    no_world_edges_every: 2
+    fake_icontour: False
     optimizer:
-      lr: 5e-5
+      lr: 2e-3
       decay_steps: 50_000
       decay_rate: 5e-1
     material:
@@ -19,6 +34,12 @@ runner:
       bending_coeff_max: 0.0013139737991266374
       density_min: 4.34e-2
       density_max: 7e-1
+    safecheck:
+      max_riz_size: 30
+      n_rest2pos_steps: 10
+      max_impulse_norm: 5e-2
+      max_ncoll: 2000
+      riz_epsilon: 0
 
 dataloader:
   num_workers: 0
@@ -35,7 +56,7 @@ dataloader:
       split_path: 'datasplits/train.csv'
       pinned_verts: True
       random_betas: False
-      n_coarse_levels: 4
+      n_coarse_levels: 3
       separate_arms: True
       wholeseq: True
       noise_scale: 0
@@ -57,11 +78,11 @@ criterions:
     friction_radius: 3e-3
 
 model:
-  postcvpr:
-    core_model: 'postcvpr'
-    architecture: "f,c0|f,c0|f,c0|d:c0,c1|c0,c1|c0,c1|d:c1|c1|c1|u:c0,c1|c0,c1|c0,c1|u:f,c0|f,c0|f,c0"
+  ccraft:
+    core_model: 'ccraft'
+    architecture: "f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3"
     collision_radius: 3e-2
-    k_world_edges: 1
-    n_coarse_levels: 3
+    body_collision_radius: 3e-2
+    n_coarse_levels: 4
 
 device: 'cuda:0'

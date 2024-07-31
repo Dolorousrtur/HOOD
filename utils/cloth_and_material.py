@@ -6,7 +6,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch_geometric.data import Batch
-from pytorch3d import io as pt3dio
 
 from utils.common import gather, unsorted_segment_sum, add_field_to_pyg_batch
 
@@ -471,65 +470,6 @@ def get_face_areas(vertices, faces):
     else:
         out = np.linalg.norm(np.cross(u, v), axis=-1) / 2.0
     return out
-
-
-def load_obj(filename, tex_coords=False):
-    """
-    Load a mesh from an obj file
-
-    :param filename: path to the obj file
-    :param tex_coords: whether to load texture (UV) coordinates
-    :return: vertices: numpy array of shape (num_vertices, 3)
-    :return: faces: numpy array of shape (num_faces, 3)
-    """
-    vertices = []
-    faces = []
-    uvs = []
-    faces_uv = []
-
-    with open(filename, 'r') as fp:
-        for line in fp:
-            line_split = line.split()
-
-            if not line_split:
-                continue
-
-            elif tex_coords and line_split[0] == 'vt':
-                uvs.append([line_split[1], line_split[2]])
-
-            elif line_split[0] == 'v':
-                vertices.append([line_split[1], line_split[2], line_split[3]])
-
-            elif line_split[0] == 'f':
-                vertex_indices = [s.split("/")[0] for s in line_split[1:]]
-                faces.append(vertex_indices)
-
-                if tex_coords:
-                    uv_indices = [s.split("/")[1] for s in line_split[1:]]
-                    faces_uv.append(uv_indices)
-
-    vertices = np.array(vertices, dtype=np.float32)
-    faces = np.array(faces, dtype=np.int32) - 1
-
-    if tex_coords:
-        uvs = np.array(uvs, dtype=np.float32)
-        faces_uv = np.array(faces_uv, dtype=np.int32) - 1
-        return vertices, faces, uvs, faces_uv
-
-    return vertices, faces
-
-
-def save_obj(filename, verts, faces):
-    if type(verts) != torch.Tensor:
-        verts = torch.FloatTensor(verts)
-    if type(faces) != torch.Tensor:
-        faces = torch.LongTensor(faces)
-
-    verts = verts.cpu().detach()
-    faces = faces.cpu().detach()
-
-    pt3dio.save_obj(filename, verts, faces)
-
 
 
 class VertexNormals(nn.Module):

@@ -76,7 +76,7 @@ class BaseBlock(MessagePassing):
         return out_features
 
 
-def make_edgesets_dict(n_coarse_levels, body=True, selfcoll=False):
+def make_edgesets_dict(n_coarse_levels, body=True, selfcoll=False, new_body=False, separate_attraction_edges=False):
     edge_sets_full = defaultdict(dict)
     edge_sets_full['mesh']['source'] = 'cloth'
     edge_sets_full['mesh']['edge_key'] = 'mesh_edge'
@@ -88,18 +88,32 @@ def make_edgesets_dict(n_coarse_levels, body=True, selfcoll=False):
         edge_sets_full[f'coarse{i}']['target'] = 'cloth'
 
     if body:
-        edge_sets_full['world_direct']['source'] = 'obstacle'
-        edge_sets_full['world_direct']['edge_key'] = 'world_edge'
-        edge_sets_full['world_direct']['target'] = 'cloth'
+        if new_body:
+            direct_key = 'body_direct'
+            inverse_key = 'body_inverse'
+            edge_key = 'body_edge'
+        else:
+            direct_key = 'world_direct'
+            inverse_key = 'world_inverse'
+            edge_key = 'world_edge'
 
-        edge_sets_full['world_inverse']['source'] = 'cloth'
-        edge_sets_full['world_inverse']['edge_key'] = 'world_edge'
-        edge_sets_full['world_inverse']['target'] = 'obstacle'
+        edge_sets_full[direct_key]['source'] = 'obstacle'
+        edge_sets_full[direct_key]['edge_key'] = edge_key
+        edge_sets_full[direct_key]['target'] = 'cloth'
+
+        edge_sets_full[inverse_key]['source'] = 'cloth'
+        edge_sets_full[inverse_key]['edge_key'] = edge_key
+        edge_sets_full[inverse_key]['target'] = 'obstacle'
 
     if selfcoll:
-        edge_sets_full['world_cloth']['source'] = 'cloth'
-        edge_sets_full['world_cloth']['edge_key'] = 'world_edge'
-        edge_sets_full['world_cloth']['target'] = 'cloth'
-
+        if separate_attraction_edges:
+            for k in ['repulsion', 'attraction']:
+                edge_sets_full[k]['source'] = 'cloth'
+                edge_sets_full[k]['edge_key'] = f'{k}_edge'
+                edge_sets_full[k]['target'] = 'cloth'
+        else:
+            edge_sets_full['world_cloth']['source'] = 'cloth'
+            edge_sets_full['world_cloth']['edge_key'] = 'world_edge'
+            edge_sets_full['world_cloth']['target'] = 'cloth'
 
     return edge_sets_full

@@ -6,7 +6,7 @@ from torch import nn
 from torch_geometric.data import Batch
 from torch_geometric.typing import Size
 
-from models import networks
+from models.core import networks
 from models.core.base import BaseBlock
 
 

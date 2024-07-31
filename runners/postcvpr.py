@@ -145,15 +145,10 @@ class Runner(nn.Module):
             if i == 0:
                 state = self.collision_solver.solve(state)
 
-            with torch.no_grad():
-                state = self.model(state, is_training=False)
+            state = self.model(state, is_training=False)
 
             trajectory.append(state['cloth'].pred_pos.detach().cpu().numpy())
             obstacle_trajectory.append(state['obstacle'].target_pos.detach().cpu().numpy())
-
-            # print('WARNING: The following lines are commented out in the original code')
-            # trajectory.append(state['cloth'].prev_pos.detach().cpu().numpy())
-            # obstacle_trajectory.append(state['obstacle'].prev_pos.detach().cpu().numpy())
 
             if not bare:
                 loss_dict = self.criterion_pass(state)
@@ -161,9 +156,7 @@ class Runner(nn.Module):
                     metrics_dict[k].append(v.item())
             prev_out_dict = state.clone()
 
-
         
-
         return trajectory, obstacle_trajectory, metrics_dict
 
     def collect_sample_wholeseq(self, sequence, index, prev_out_dict):

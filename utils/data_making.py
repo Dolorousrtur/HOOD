@@ -5,7 +5,8 @@ from scipy.spatial.transform import Rotation
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
 
-from utils.common import pickle_dump, pickle_load
+from utils.io import pickle_dump
+from utils.io import pickle_load
 
 
 def make_slerp(pA: np.ndarray, pB: np.ndarray, n_steps: int, omit_last: bool = True) -> np.ndarray:

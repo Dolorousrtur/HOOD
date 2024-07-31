@@ -1,6 +1,8 @@
 import os
 import sys
 
+from utils.io import pickle_dump
+
 # sys.path.append(os.environ['HOOD_PROJECT'])
 sys.path.insert(0, os.environ['HOOD_PROJECT'])
 # print(sys.path)
@@ -17,7 +19,7 @@ from typing import Optional
 from omegaconf import MISSING, OmegaConf, DictConfig
 from tqdm import tqdm
 
-from utils.common import move2device, pickle_dump
+from utils.common import move2device
 
 
 def create_sequences(out_root, model_name, competitor, conf):

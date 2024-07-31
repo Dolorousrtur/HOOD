@@ -6,7 +6,7 @@ from torch_geometric.data import Batch
 from torch_geometric.nn import MessagePassing
 from torch_geometric.typing import Size
 
-from models import networks
+from models.core import networks
 
 
 class GraphNetBlock(MessagePassing):

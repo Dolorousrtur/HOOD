@@ -12,10 +12,11 @@ from smplx import SMPL
 from torch_geometric.data import HeteroData
 
 from utils.coarse import make_coarse_edges
-from utils.common import NodeType, triangles_to_edges, separate_arms, pickle_load
+from utils.common import NodeType, triangles_to_edges, separate_arms
 from utils.datasets import load_garments_dict, make_garment_smpl_dict
 from utils.defaults import DEFAULTS
 from utils.garment_smpl import GarmentSMPL
+from utils.io import pickle_load
 
 
 @dataclass

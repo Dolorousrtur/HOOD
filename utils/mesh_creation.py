@@ -9,9 +9,9 @@ import trimesh
 from sklearn import neighbors
 from tqdm import tqdm
 
-from utils.cloth_and_material import load_obj
+from utils.io import load_obj, pickle_dump, pickle_load
 from utils.coarse import make_graph_from_faces, make_coarse_edges
-from utils.common import NodeType, pickle_dump, pickle_load
+from utils.common import NodeType
 from utils.defaults import DEFAULTS
 
 
@@ -298,7 +298,7 @@ def make_restpos_dict(vertices_full, faces_full):
 
 def obj2template(obj_path, verbose=False):
 
-    gc = GarmentCreator(None, None, None, None, collect_lbs=False, coarse=False, verbose=verbose)    
+    gc = GarmentCreator(None, None, None, None, collect_lbs=False, coarse=True, verbose=verbose)    
     out_dict = gc.make_garment_dict(obj_path)
 
     return out_dict

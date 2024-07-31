@@ -1,0 +1,120 @@
+# warp_c = warp_c/bcwarp2_warploss_pin1e2
+experiment:
+  name: debug
+  save_checkpoint_every: 1000
+  save_checkpoint_every_wlong: 200
+  n_epochs: 20000000
+  use_writer: True
+  n_steps_only_short: 50000
+  enable_repulsions: True
+  enable_attractions: True
+
+collisions:
+  n_candidates_per_triangle: 160
+  n_collisions_per_triangle: 16
+
+  
+runner:
+  ccraft:
+    warmup_steps: 100
+    n_opt_steps: 1
+    increase_roll_every: 5000
+    roll_max: 20
+    push_eps: 2e-3
+    initial_ts: 3.333333333333333e-1
+    regular_ts: 3.333333333333333e-2
+    use_restpos_for_strain_tensor: True
+    opposite_edges: False
+    grad_clip: 1.
+    random_pin_nobody: False
+    n_random_pin_nobody: 2
+    nocollect_after: 2
+    no_world_edges_every: 2
+    fake_icontour: False
+    optimizer:
+      lr: 2e-3
+      decay_steps: 50_000
+      decay_rate: 5e-1
+    material:
+      lame_mu_min: 15909
+      lame_mu_max: 63636
+      lame_lambda_min: 3535.414406069427
+      lame_lambda_max: 93333.73508005822
+      bending_coeff_min: 6.370782056371576e-08
+      bending_coeff_max: 0.0013139737991266374
+      density_min: 4.34e-2
+      density_max: 7e-1
+    safecheck:
+      max_riz_size: 30
+      n_rest2pos_steps: 10
+      max_impulse_norm: 5e-2
+      max_ncoll: 2000
+      riz_epsilon: 0
+
+dataloader_short:
+  num_workers: 4
+  batch_size: 1
+  pyg_data: True
+  dataset:
+    bedlam:
+      path: 'sequences'
+      split_path: 'datasplits/debug/aaron_022.csv'
+      smpl_dir: 'smplx_capital/smplx'
+      garment_dict_file: 'garment_templates/bedlam.pkl'
+      smplx_segmentation_file: 'garf/smplx_vert_segmentation.json'
+      pinned_verts: True
+      ts_scale: 1
+      n_coarse_levels: 4
+      nobody_freq: 0.
+#      random_pin: True
+#      n_random_pin: 2
+
+dataloader_long:
+  dataset:
+    multigarment_nlu:
+      rollout_steps: -1
+      noise_scale: 0.
+
+criterions:
+  postcvpr.mataug.stretching_energy: #-
+  postcvpr.gravitational_energy: #-
+    z_axis: 1
+  postcvpr.mataug.bending_energy: #-
+  ccraft.inertia_ii:
+  ccraft.collision_penalty_wramp: #-
+    weight_start: 5e+3
+    weight_max: 1e+6
+    eps: 3e-3
+    start_rampup_iteration: 30000
+    n_rampup_iterations: 10000
+  ccraft.repulsion_only: #-
+    weight_start: 0.
+    weight_max: 2e+6
+    step_start: 0
+    step_max: 100
+    correspondence_eps: 1e-2
+    penalty_eps: 3e-3
+    pinned_relative_weight: 1e2
+  ccraft.icontour_nanfix: #-
+    weight_start: 0.
+    weight_max: 1e+7
+    step_start: 45000
+    step_max: 50000
+    detach_coords: True
+    detach_coeffs: False
+    detach_aux_bary: False
+    detach_aux_edges: False
+    only_edgeloss: True
+
+model:
+  ccraft:
+    core_model: 'ccraft'
+    architecture: "f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3|f,c3"
+    collision_radius: 3e-2
+    body_collision_radius: 3e-2
+    n_coarse_levels: 4
+
+
+device: 'cuda:0'
+warp: True
+ts_agnostic: False
