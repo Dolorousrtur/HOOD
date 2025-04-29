@@ -377,6 +377,8 @@ class GarmentBuilder:
         else:
             rest_pos = self.resize_restpos(garment_dict['rest_pos'])
 
+        rest_pos = rest_pos.astype(np.float32)
+
         sample['cloth'].rest_pos = torch.tensor(rest_pos)
         return sample
 

@@ -294,6 +294,8 @@ class Loader:
         else:
             cloth_dict['rest_pos'] = self.resize_restpos(garment_dict['rest_pos'])
 
+        cloth_dict['rest_pos'] = cloth_dict['rest_pos'].astype(np.float32)
+
         center_nodes = garment_dict['center']
         center = np.random.choice(center_nodes)
         if 'coarse_edges' not in garment_dict:
