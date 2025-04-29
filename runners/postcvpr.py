@@ -326,7 +326,11 @@ def run_epoch(training_module: Runner, aux_modules: dict, dataloader: DataLoader
     optimizer = aux_modules['optimizer']
     scheduler = aux_modules['scheduler']
 
-    prbar = tqdm(dataloader, desc=cfg.config)
+    if cfg.experiment.max_iter is not None:
+        num_iter = min(len(dataloader), cfg.experiment.max_iter)
+    else:
+        num_iter = len(dataloader)
+    prbar = tqdm(dataloader, desc=cfg.config, total=num_iter)
 
     if hasattr(cfg, 'run_dir'):
         checkpoints_dir = os.path.join(cfg.run_dir, 'checkpoints')

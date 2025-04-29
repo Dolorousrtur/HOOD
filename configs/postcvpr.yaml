@@ -2,6 +2,7 @@ experiment:
   name: debug
   save_checkpoint_every: 2000
   n_epochs: 20000000
+  max_iter: 60000
 
 runner:
   postcvpr:
